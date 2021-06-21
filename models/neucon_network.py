@@ -111,35 +111,52 @@ class NeuConNet(nn.Module):
         for i in range(self.cfg.N_LAYER):
             interval = 2 ** (self.n_scales - i)
             scale = self.n_scales - i
+            # print('\n' + '='*80)
+            # print('Interval & Scale:', interval, scale)
 
             if i == 0:
+                # print('-'*10 + 'Generate New coords' + '-'*10)
                 # ----generate new coords----
                 coords = generate_grid(self.cfg.N_VOX, interval)[0]
+                # print('coords:', coords.shape)
                 up_coords = []
                 for b in range(bs):
                     up_coords.append(torch.cat([torch.ones(1, coords.shape[-1]).to(coords.device) * b, coords]))
                 up_coords = torch.cat(up_coords, dim=1).permute(1, 0).contiguous()
+                # print('up_coords:', up_coords.shape)
             else:
+                # print('-'*10 + 'Upsample Coords' + '-'*10)
                 # ----upsample coords----
                 up_feat, up_coords = self.upsample(pre_feat, pre_coords, interval)
+                # print('up_feat:', up_feat.shape)
+                # print('up_coords:', up_coords.shape)
+
 
             # ----back project----
+            # print('-'*10 + 'Back Project' + '-'*10)
             feats = torch.stack([feat[scale] for feat in features])
             KRcam = inputs['proj_matrices'][:, :, scale].permute(1, 0, 2, 3).contiguous()
+            # print('feats:', feats.shape)
+            # print('KRcam:', KRcam.shape)
             volume, count = back_project(up_coords, inputs['vol_origin_partial'], self.cfg.VOXEL_SIZE, feats,
                                          KRcam)
+            # print('volume:', volume.shape)
+            # print('count:', count.shape)
             grid_mask = count > 1
 
             # ----concat feature from last stage----
+            # print('-'*10 + 'concat feature from last stage' + '-'*10)
             if i != 0:
                 feat = torch.cat([volume, up_feat], dim=1)
             else:
                 feat = volume
+            # print('feat:', feat.shape)
 
             if not self.cfg.FUSION.FUSION_ON:
                 tsdf_target, occ_target = self.get_target(up_coords, inputs, scale)
 
             # ----convert to aligned camera coordinate----
+            # print('-'*10 + 'convert to aligned camera coordinate' + '-'*10)
             r_coords = up_coords.detach().clone().float()
             for b in range(bs):
                 batch_ind = torch.nonzero(up_coords[:, 0] == b).squeeze(1)
@@ -150,20 +167,34 @@ class NeuConNet(nn.Module):
                 r_coords[batch_ind, 1:] = coords_batch
 
             # batch index is in the last position
+            # print('r_coords:', r_coords.shape)
             r_coords = r_coords[:, [1, 2, 3, 0]]
+            # print('r_coords:', r_coords.shape)
 
             # ----sparse conv 3d backbone----
+            # print('-'*10 + 'sparse conv 3d backbone' + '-'*10)
             point_feat = PointTensor(feat, r_coords)
+            # print('point_feat.F:', point_feat.F.shape)
+            # print('point_feat.C:', point_feat.C.shape)
             feat = self.sp_convs[i](point_feat)
+            # print('feat:',feat.shape)
 
             # ----gru fusion----
+            # print('-'*10 + 'gru fusion' + '-'*10)
             if self.cfg.FUSION.FUSION_ON:
                 up_coords, feat, tsdf_target, occ_target = self.gru_fusion(up_coords, feat, inputs, i)
+                # print('up_coords:', up_coords.shape)
+                # print('feat:', feat.shape)
+                # print('tsdf_target:', tsdf_target.shape)
+                # print('occ_target:', occ_target.shape)
                 if self.cfg.FUSION.FULL:
                     grid_mask = torch.ones_like(feat[:, 0]).bool()
+                    # print('grid_mask:', grid_mask.shape)
 
             tsdf = self.tsdf_preds[i](feat)
             occ = self.occ_preds[i](feat)
+            # print('tsdf:', tsdf.shape)
+            # print('occ:', occ.shape)
 
             # -------compute loss-------
             if tsdf_target is not None:
@@ -175,16 +206,21 @@ class NeuConNet(nn.Module):
             loss_dict.update({f'tsdf_occ_loss_{i}': loss})
 
             # ------define the sparsity for the next stage-----
+            # print('-'*10 + 'define the sparsity for the next stage' + '-'*10)
             occupancy = occ.squeeze(1) > self.cfg.THRESHOLDS[i]
             occupancy[grid_mask == False] = False
+            # print('occupancy:', occupancy.shape)
 
             num = int(occupancy.sum().data.cpu())
+            # print('num:', num)
 
             if num == 0:
                 logger.warning('no valid points: scale {}'.format(i))
                 return outputs, loss_dict
 
             # ------avoid out of memory: sample points if num of points is too large-----
+            # print('-'*10 + 'avoid out of memory: sample points if num of points is too large' + '-'*10)
+            # print('up_coords:', up_coords.shape)
             if self.training and num > self.cfg.TRAIN_NUM_SAMPLE[i] * bs:
                 choice = np.random.choice(num, num - self.cfg.TRAIN_NUM_SAMPLE[i] * bs,
                                           replace=False)
@@ -192,6 +228,7 @@ class NeuConNet(nn.Module):
                 occupancy[ind[choice]] = False
 
             pre_coords = up_coords[occupancy]
+            # print('pre_coords:', pre_coords.shape)
             for b in range(bs):
                 batch_ind = torch.nonzero(pre_coords[:, 0] == b).squeeze(1)
                 if len(batch_ind) == 0:
@@ -202,7 +239,12 @@ class NeuConNet(nn.Module):
             pre_tsdf = tsdf[occupancy]
             pre_occ = occ[occupancy]
 
+            # print('pre_feat:', pre_feat.shape)
+            # print('pre_tsdf:', pre_tsdf.shape)
+            # print('pre_occ:', pre_occ.shape)
+
             pre_feat = torch.cat([pre_feat, pre_tsdf, pre_occ], dim=1)
+            # print('pre_feat:', pre_feat.shape)
 
             if i == self.cfg.N_LAYER - 1:
                 outputs['coords'] = pre_coords

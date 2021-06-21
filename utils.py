@@ -199,6 +199,8 @@ class SaveScene(object):
         if cfg.VIS_INCREMENTAL:
             self.vis = Visualizer()
 
+        self.count=0
+
     def close(self):
         self.vis.close()
         cv2.destroyAllWindows()
@@ -285,7 +287,8 @@ class SaveScene(object):
             np.savez_compressed(
                 os.path.join(save_path, '{}.npz'.format(self.scene_name)),
                 **data)
-            mesh.export(os.path.join(save_path, '{}.ply'.format(self.scene_name)))
+            mesh.export(os.path.join(save_path, '{}_{}.ply'.format(self.scene_name, self.count)))
+            self.count += 1
 
     def __call__(self, outputs, inputs, epoch_idx):
         # no scene saved, skip

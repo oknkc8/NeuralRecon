@@ -248,7 +248,8 @@ def test(from_latest=False):
                     for n in sample['fragment']:
                         logger.info(n)
                     # save mesh if SAVE_SCENE_MESH and is the last fragment
-                    save_scene = cfg.SAVE_SCENE_MESH and batch_idx == batch_len - 1
+                    # save_scene = cfg.SAVE_SCENE_MESH and batch_idx == batch_len - 1
+                    save_scene = True
 
                     start_time = time.time()
                     loss, scalar_outputs, outputs = test_sample(sample, save_scene)

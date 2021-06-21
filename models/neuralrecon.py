@@ -75,6 +75,8 @@ class NeuralRecon(nn.Module):
 
         # image feature extraction
         # in: images; out: feature maps
+        # img : (batch size, C, H, W)
+        # len(imgs) : number of views
         features = [self.backbone2d(self.normalizer(img)) for img in imgs]
 
         # coarse-to-fine decoder: SparseConv and GRU Fusion.
