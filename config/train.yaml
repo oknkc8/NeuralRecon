@@ -35,6 +35,8 @@ MODEL:
     AVERAGE: False
     FULL: True
 
+  DEPTH_LOSS: False
+
   LW: [1.0, 0.8, 0.64]
 
   THRESHOLDS: [0, 0, 0]

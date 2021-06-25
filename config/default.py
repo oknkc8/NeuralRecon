@@ -69,6 +69,8 @@ _C.MODEL.FUSION.HIDDEN_DIM = 64
 _C.MODEL.FUSION.AVERAGE = False
 _C.MODEL.FUSION.FULL = False
 
+_C.MODEL.DEPTH_LOSS = False
+
 
 def update_config(cfg, args):
     cfg.defrost()

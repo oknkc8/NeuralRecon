@@ -335,7 +335,7 @@ class RandomTransformSpace(object):
                 data['tsdf_list'].append(tsdf_vol)
                 data['occ_list'].append(occ_vol)
             data.pop('tsdf_list_full')
-            data.pop('depth')
+            #data.pop('depth')
         data.pop('epoch')
         return data
 
