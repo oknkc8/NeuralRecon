@@ -1,0 +1,278 @@
+number of gpus: 1
+creating log file ./checkpoints/20210625_061754_train.log
+
+================================================================================
+Interval & Scale: 4 2
+----------Generate New coords----------
+coords: torch.Size([3, 13824])
+up_coords: torch.Size([13824, 4])
+----------Back Project----------
+features: 9
+0th feature: torch.Size([1, 24, 120, 160])
+1th feature: torch.Size([1, 40, 60, 80])
+2th feature: torch.Size([1, 80, 30, 40])
+0th depth: torch.Size([9, 480, 640])
+feats: torch.Size([9, 1, 80, 30, 40])
+KRcam: torch.Size([9, 1, 4, 4])
+
+	==========back_project==========
+	n_views: 9
+	bs: 1
+	c: 80
+	h: 30
+	w: 40
+	feature_volume_all: torch.Size([13824, 81])
+	count: torch.Size([13824])
+	=======================
+	batch: 0
+	batch_ind: torch.Size([13824])
+	coords_batch: torch.Size([13824, 3])
+	--------------------
+	coords_batch: torch.Size([13824, 3])
+	origin_batch: torch.Size([1, 3])
+	feats_batch: torch.Size([9, 80, 30, 40])
+	proj_batch: torch.Size([9, 4, 4])
+	--------------------
+	grid_batch: torch.Size([13824, 3])
+	rs_grid: torch.Size([9, 13824, 3])
+	rs_grid: torch.Size([9, 3, 13824])
+	rs_grid: torch.Size([9, 4, 13824])
+	--------------------
+	im_p: torch.Size([9, 4, 13824])
+	--------------------
+	im_grid: torch.Size([9, 13824, 2])
+	mask: torch.Size([9, 13824, 2])
+	mask: torch.Size([9, 13824])
+	--------------------
+	feats_batch: torch.Size([9, 80, 30, 40])
+	im_grid: torch.Size([9, 1, 13824, 2])
+	features: torch.Size([9, 80, 1, 13824])
+	--------------------
+	features: torch.Size([9, 80, 13824])
+	mask: torch.Size([9, 13824])
+	im_z: torch.Size([9, 13824])
+	--------------------
+	count: torch.Size([13824])
+	--------------------
+	features: torch.Size([80, 13824])
+	mask: torch.Size([13824])
+	in_scope_mask: torch.Size([1, 13824])
+	features: torch.Size([13824, 80])
+	--------------------
+	im_z: torch.Size([13824, 1])
+	features: torch.Size([13824, 81])
+	--------------------
+
+volume: torch.Size([13824, 81])
+count: torch.Size([13824])
+----------concat feature from last stage----------
+feat: torch.Size([13824, 81])
+----------convert to aligned camera coordinate----------
+r_coords: torch.Size([13824, 4])
+r_coords: torch.Size([13824, 4])
+----------sparse conv 3d backbone----------
+point_feat.F: torch.Size([13824, 81])
+point_feat.C: torch.Size([13824, 4])
+feat: torch.Size([13824, 96])
+----------gru fusion----------
+up_coords: torch.Size([13824, 4])
+feat: torch.Size([13824, 96])
+tsdf_target: torch.Size([13824, 1])
+occ_target: torch.Size([13824, 1])
+grid_mask: torch.Size([13824])
+tsdf: torch.Size([13824, 1])
+occ: torch.Size([13824, 1])
+----------define the sparsity for the next stage----------
+occupancy: torch.Size([13824])
+num: 12595
+----------avoid out of memory: sample points if num of points is too large----------
+up_coords: torch.Size([13824, 4])
+pre_coords: torch.Size([4096, 4])
+pre_feat: torch.Size([4096, 96])
+pre_tsdf: torch.Size([4096, 1])
+pre_occ: torch.Size([4096, 1])
+pre_feat: torch.Size([4096, 98])
+
+================================================================================
+Interval & Scale: 2 1
+----------Upsample Coords----------
+up_feat: torch.Size([32768, 98])
+up_coords: torch.Size([32768, 4])
+----------Back Project----------
+features: 9
+0th feature: torch.Size([1, 24, 120, 160])
+1th feature: torch.Size([1, 40, 60, 80])
+2th feature: torch.Size([1, 80, 30, 40])
+0th depth: torch.Size([9, 480, 640])
+feats: torch.Size([9, 1, 40, 60, 80])
+KRcam: torch.Size([9, 1, 4, 4])
+
+	==========back_project==========
+	n_views: 9
+	bs: 1
+	c: 40
+	h: 60
+	w: 80
+	feature_volume_all: torch.Size([32768, 41])
+	count: torch.Size([32768])
+	=======================
+	batch: 0
+	batch_ind: torch.Size([32768])
+	coords_batch: torch.Size([32768, 3])
+	--------------------
+	coords_batch: torch.Size([32768, 3])
+	origin_batch: torch.Size([1, 3])
+	feats_batch: torch.Size([9, 40, 60, 80])
+	proj_batch: torch.Size([9, 4, 4])
+	--------------------
+	grid_batch: torch.Size([32768, 3])
+	rs_grid: torch.Size([9, 32768, 3])
+	rs_grid: torch.Size([9, 3, 32768])
+	rs_grid: torch.Size([9, 4, 32768])
+	--------------------
+	im_p: torch.Size([9, 4, 32768])
+	--------------------
+	im_grid: torch.Size([9, 32768, 2])
+	mask: torch.Size([9, 32768, 2])
+	mask: torch.Size([9, 32768])
+	--------------------
+	feats_batch: torch.Size([9, 40, 60, 80])
+	im_grid: torch.Size([9, 1, 32768, 2])
+	features: torch.Size([9, 40, 1, 32768])
+	--------------------
+	features: torch.Size([9, 40, 32768])
+	mask: torch.Size([9, 32768])
+	im_z: torch.Size([9, 32768])
+	--------------------
+	count: torch.Size([32768])
+	--------------------
+	features: torch.Size([40, 32768])
+	mask: torch.Size([32768])
+	in_scope_mask: torch.Size([1, 32768])
+	features: torch.Size([32768, 40])
+	--------------------
+	im_z: torch.Size([32768, 1])
+	features: torch.Size([32768, 41])
+	--------------------
+
+volume: torch.Size([32768, 41])
+count: torch.Size([32768])
+----------concat feature from last stage----------
+feat: torch.Size([32768, 139])
+----------convert to aligned camera coordinate----------
+r_coords: torch.Size([32768, 4])
+r_coords: torch.Size([32768, 4])
+----------sparse conv 3d backbone----------
+point_feat.F: torch.Size([32768, 139])
+point_feat.C: torch.Size([32768, 4])
+feat: torch.Size([32768, 48])
+----------gru fusion----------
+up_coords: torch.Size([32768, 4])
+feat: torch.Size([32768, 48])
+tsdf_target: torch.Size([32768, 1])
+occ_target: torch.Size([32768, 1])
+grid_mask: torch.Size([32768])
+tsdf: torch.Size([32768, 1])
+occ: torch.Size([32768, 1])
+----------define the sparsity for the next stage----------
+occupancy: torch.Size([32768])
+num: 590
+----------avoid out of memory: sample points if num of points is too large----------
+up_coords: torch.Size([32768, 4])
+pre_coords: torch.Size([590, 4])
+pre_feat: torch.Size([590, 48])
+pre_tsdf: torch.Size([590, 1])
+pre_occ: torch.Size([590, 1])
+pre_feat: torch.Size([590, 50])
+
+================================================================================
+Interval & Scale: 1 0
+----------Upsample Coords----------
+up_feat: torch.Size([4720, 50])
+up_coords: torch.Size([4720, 4])
+----------Back Project----------
+features: 9
+0th feature: torch.Size([1, 24, 120, 160])
+1th feature: torch.Size([1, 40, 60, 80])
+2th feature: torch.Size([1, 80, 30, 40])
+0th depth: torch.Size([9, 480, 640])
+feats: torch.Size([9, 1, 24, 120, 160])
+KRcam: torch.Size([9, 1, 4, 4])
+
+	==========back_project==========
+	n_views: 9
+	bs: 1
+	c: 24
+	h: 120
+	w: 160
+	feature_volume_all: torch.Size([4720, 25])
+	count: torch.Size([4720])
+	=======================
+	batch: 0
+	batch_ind: torch.Size([4720])
+	coords_batch: torch.Size([4720, 3])
+	--------------------
+	coords_batch: torch.Size([4720, 3])
+	origin_batch: torch.Size([1, 3])
+	feats_batch: torch.Size([9, 24, 120, 160])
+	proj_batch: torch.Size([9, 4, 4])
+	--------------------
+	grid_batch: torch.Size([4720, 3])
+	rs_grid: torch.Size([9, 4720, 3])
+	rs_grid: torch.Size([9, 3, 4720])
+	rs_grid: torch.Size([9, 4, 4720])
+	--------------------
+	im_p: torch.Size([9, 4, 4720])
+	--------------------
+	im_grid: torch.Size([9, 4720, 2])
+	mask: torch.Size([9, 4720, 2])
+	mask: torch.Size([9, 4720])
+	--------------------
+	feats_batch: torch.Size([9, 24, 120, 160])
+	im_grid: torch.Size([9, 1, 4720, 2])
+	features: torch.Size([9, 24, 1, 4720])
+	--------------------
+	features: torch.Size([9, 24, 4720])
+	mask: torch.Size([9, 4720])
+	im_z: torch.Size([9, 4720])
+	--------------------
+	count: torch.Size([4720])
+	--------------------
+	features: torch.Size([24, 4720])
+	mask: torch.Size([4720])
+	in_scope_mask: torch.Size([1, 4720])
+	features: torch.Size([4720, 24])
+	--------------------
+	im_z: torch.Size([4720, 1])
+	features: torch.Size([4720, 25])
+	--------------------
+
+volume: torch.Size([4720, 25])
+count: torch.Size([4720])
+----------concat feature from last stage----------
+feat: torch.Size([4720, 75])
+----------convert to aligned camera coordinate----------
+r_coords: torch.Size([4720, 4])
+r_coords: torch.Size([4720, 4])
+----------sparse conv 3d backbone----------
+point_feat.F: torch.Size([4720, 75])
+point_feat.C: torch.Size([4720, 4])
+feat: torch.Size([4720, 24])
+----------gru fusion----------
+up_coords: torch.Size([4720, 4])
+feat: torch.Size([4720, 24])
+tsdf_target: torch.Size([4720, 1])
+occ_target: torch.Size([4720, 1])
+grid_mask: torch.Size([4720])
+tsdf: torch.Size([4720, 1])
+occ: torch.Size([4720, 1])
+----------define the sparsity for the next stage----------
+occupancy: torch.Size([4720])
+num: 4065
+----------avoid out of memory: sample points if num of points is too large----------
+up_coords: torch.Size([4720, 4])
+pre_coords: torch.Size([4065, 4])
+pre_feat: torch.Size([4065, 24])
+pre_tsdf: torch.Size([4065, 1])
+pre_occ: torch.Size([4065, 1])
+pre_feat: torch.Size([4065, 26])
