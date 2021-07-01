@@ -10,12 +10,14 @@ from torch.utils.data import DataLoader
 from tensorboardX import SummaryWriter
 from loguru import logger
 
-from utils import tensor2float, save_scalars, DictAverageMeter, SaveScene, make_nograd_func
+from utils import tensor2float, save_scalars, DictAverageMeter, SaveScene, make_nograd_func, save_images
 from datasets import transforms, find_dataset_def
 from models import NeuralRecon
 from config import cfg, update_config
 from datasets.sampler import DistributedSampler
 from ops.comm import *
+
+import datetime
 
 
 def args():
@@ -77,15 +79,17 @@ torch.cuda.manual_seed(cfg.SEED)
 
 # create logger
 if is_main_process():
-    if not os.path.isdir(cfg.LOGDIR):
-        os.makedirs(cfg.LOGDIR)
+    timestamp = datetime.datetime.now().strftime("%m-%d-%H-%M")
+
+    if not os.path.isdir(os.path.join(cfg.LOGDIR, timestamp)):
+        os.makedirs(os.path.join(cfg.LOGDIR, timestamp))
 
     current_time_str = str(datetime.datetime.now().strftime('%Y%m%d_%H%M%S'))
-    logfile_path = os.path.join(cfg.LOGDIR, f'{current_time_str}_{cfg.MODE}.log')
+    logfile_path = os.path.join(os.path.join(cfg.LOGDIR, timestamp), f'{current_time_str}_{cfg.MODE}.log')
     print('creating log file', logfile_path)
     logger.add(logfile_path, format="{time} {level} {message}", level="INFO")
 
-    tb_writer = SummaryWriter(cfg.LOGDIR)
+    tb_writer = SummaryWriter(os.path.join(cfg.LOGDIR, timestamp))
 
 # Augmentation
 if cfg.MODE == 'train':
@@ -202,7 +206,7 @@ def train():
             global_step = len(TrainImgLoader) * epoch_idx + batch_idx
             do_summary = global_step % cfg.SUMMARY_FREQ == 0
             start_time = time.time()
-            loss, scalar_outputs = train_sample(sample)
+            loss, scalar_outputs, image_outputs = train_sample(sample)
             if is_main_process():
                 logger.info(
                     'Epoch {}/{}, Iter {}/{}, train loss = {:.3f}, time = {:.3f}'.format(epoch_idx, cfg.TRAIN.EPOCHS,
@@ -211,7 +215,9 @@ def train():
                                                                                          time.time() - start_time))
             if do_summary and is_main_process():
                 save_scalars(tb_writer, 'train', scalar_outputs, global_step)
+                save_images(tb_writer, 'train', image_outputs, global_step)
             del scalar_outputs
+
 
         # checkpoint
         if (epoch_idx + 1) % cfg.SAVE_FREQ == 0 and is_main_process():
@@ -279,12 +285,12 @@ def train_sample(sample):
     model.train()
     optimizer.zero_grad()
 
-    outputs, loss_dict = model(sample)
+    outputs, loss_dict, image_dict = model(sample)
     loss = loss_dict['total_loss']
     loss.backward()
     torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
     optimizer.step()
-    return tensor2float(loss), tensor2float(loss_dict)
+    return tensor2float(loss), tensor2float(loss_dict), image_dict
 
 
 @make_nograd_func

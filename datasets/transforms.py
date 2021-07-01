@@ -79,18 +79,32 @@ class IntrinsicsPoseToProjection(object):
         data['world_to_aligned_camera'] = torch.from_numpy(rotation_matrix4x4).float() @ middle_pose.inverse()
 
         proj_matrices = []
+        depth_proj_matrices = []
         for intrinsics, extrinsics in zip(data['intrinsics'], data['extrinsics']):
-            view_proj_matrics = []
+            view_proj_matrices = []
+            depth_view_proj_matrices = []
             for i in range(3):
                 # from (camera to world) to (world to camera)
                 proj_mat = torch.inverse(extrinsics.data.cpu())
                 scale_intrinsics = intrinsics / self.stride / 2 ** i
                 scale_intrinsics[-1, -1] = 1
                 proj_mat[:3, :4] = scale_intrinsics @ proj_mat[:3, :4]
-                view_proj_matrics.append(proj_mat)
-            view_proj_matrics = torch.stack(view_proj_matrics)
-            proj_matrices.append(view_proj_matrics)
+                view_proj_matrices.append(proj_mat)
+
+                depth_proj_mat = torch.inverse(extrinsics.data.cpu())
+                scale_intrinsics = intrinsics           # no scale change for depth imgs (fixed scale)
+                scale_intrinsics[-1, -1] = 1
+                depth_proj_mat[:3, :4] = scale_intrinsics @ depth_proj_mat[:3, :4]
+                depth_view_proj_matrices.append(depth_proj_mat)
+
+            view_proj_matrices = torch.stack(view_proj_matrices)
+            dpeth_view_proj_matrices = torch.stack(depth_view_proj_matrices)
+            
+            proj_matrices.append(view_proj_matrices)
+            depth_proj_matrices.append(dpeth_view_proj_matrices)
         data['proj_matrices'] = torch.stack(proj_matrices)
+        data['depth_proj_matrices'] = torch.stack(depth_proj_matrices)
+
         data.pop('intrinsics')
         data.pop('extrinsics')
         return data
@@ -119,14 +133,18 @@ class ResizeImage(object):
         self.size = size
 
     def __call__(self, data):
-        for i, im in enumerate(data['imgs']):
+        for i, (im, depth) in enumerate(zip(data['imgs'], data['depth'])):
             im, intrinsics = pad_scannet(im, data['intrinsics'][i])
             w, h = im.size
             im = im.resize(self.size, Image.BILINEAR)
+
+            pil_depth = Image.fromarray(depth)
+            depth = pil_depth.resize(self.size, Image.BILINEAR)
             intrinsics[0, :] /= (w / self.size[0])
             intrinsics[1, :] /= (h / self.size[1])
 
             data['imgs'][i] = np.array(im, dtype=np.float32)
+            data['depth'][i] = np.array(depth, dtype=np.float32)
             data['intrinsics'][i] = intrinsics
 
         return data

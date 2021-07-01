@@ -6,7 +6,8 @@ SAVE_FREQ: 1
 MODE: 'train'
 
 TRAIN:
-  PATH: '../data/DATAROOT_SCANNET/scannet'
+  #PATH: '../data/DATAROOT_SCANNET/scannet'
+  PATH: '/scannet/DATAROOT_SCANNET/scannet'
   EPOCHS: 991
   N_VIEWS: 9
   LR: 1e-3
@@ -14,7 +15,8 @@ TRAIN:
   LREPOCHS: '12,24,48:2'
 
 TEST:
-  PATH: '../data/DATAROOT_SCANNET/scannet'
+  #PATH: '../data/DATAROOT_SCANNET/scannet'
+  PATH: '/scannet/DATAROOT_SCANNET/scannet'
   N_VIEWS: 9
   N_WORKERS: 4
 
@@ -37,7 +39,7 @@ MODEL:
 
   DEPTH_LOSS: False
 
-  LW: [1.0, 0.8, 0.64]
+  LW: [1.0, 1.0, 0.8, 0.64]
 
   THRESHOLDS: [0, 0, 0]
   POS_WEIGHT: 1.5

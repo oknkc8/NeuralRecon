@@ -7,7 +7,7 @@ _C.DATASET = 'scannet'
 _C.BATCH_SIZE = 1
 _C.LOADCKPT = ''
 _C.LOGDIR = './checkpoints/debug'
-_C.RESUME = True
+_C.RESUME = False
 _C.SUMMARY_FREQ = 20
 _C.SAVE_FREQ = 1
 _C.SEED = 1
@@ -49,7 +49,7 @@ _C.MODEL.N_LAYER = 3
 _C.MODEL.TRAIN_NUM_SAMPLE = [4096, 16384, 65536]
 _C.MODEL.TEST_NUM_SAMPLE = [32768, 131072]
 
-_C.MODEL.LW = [1.0, 0.8, 0.64]
+_C.MODEL.LW = [1.0, 0.8, 0.64, 1.0]
 
 # TODO: images are currently loaded RGB, but the pretrained models expect BGR
 _C.MODEL.PIXEL_MEAN = [103.53, 116.28, 123.675]
