@@ -81,7 +81,7 @@ class NeuralRecon(nn.Module):
 
         # coarse-to-fine decoder: SparseConv and GRU Fusion.
         # in: image feature; out: sparse coords and tsdf
-        outputs, loss_dict = self.neucon_net(features, inputs, outputs)
+        outputs, loss_dict, image_dict = self.neucon_net(features, inputs, outputs)
 
         # fuse to global volume.
         if not self.training and 'coords' in outputs.keys():
@@ -98,4 +98,4 @@ class NeuralRecon(nn.Module):
             weighted_loss += v * self.cfg.LW[i]
 
         loss_dict.update({'total_loss': weighted_loss})
-        return outputs, loss_dict
+        return outputs, loss_dict, image_dict
