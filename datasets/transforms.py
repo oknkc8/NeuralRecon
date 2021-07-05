@@ -93,6 +93,7 @@ class IntrinsicsPoseToProjection(object):
 
                 depth_proj_mat = torch.inverse(extrinsics.data.cpu())
                 scale_intrinsics = intrinsics           # no scale change for depth imgs (fixed scale)
+                #scale_intrinsics = intrinsics / self.stride / 2 ** i
                 scale_intrinsics[-1, -1] = 1
                 depth_proj_mat[:3, :4] = scale_intrinsics @ depth_proj_mat[:3, :4]
                 depth_view_proj_matrices.append(depth_proj_mat)

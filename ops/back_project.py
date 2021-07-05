@@ -89,7 +89,7 @@ def back_project(coords, origin, voxel_size, feats, KRcam):
         # print('\tmask:', mask.shape)
         mask = (mask.sum(dim=-1) == 2) & (im_z > 0)     # mask.sum(dim=-1) == 2 : both im_x and im_y is positive and less than 1 
                                                         # im_z > 0 : ahead of normal plane (im_z=0)
-        # print('\tmask:', mask.shape)
+        #print('\tmask:', mask.grad_fn)
         # print('\t'+ '-'*20)
 
         feats_batch = feats_batch.view(n_views, c, h, w)
@@ -108,11 +108,15 @@ def back_project(coords, origin, voxel_size, feats, KRcam):
         # print('\tim_z:', im_z.shape)
         # print('\t'+ '-'*20)
         # remove nan
+        # print('features:', features.is_leaf)
+        # print('features:', features.grad_fn)
         features[mask.unsqueeze(1).expand(-1, c, -1) == False] = 0
+        # print('features:', features.is_leaf)
+        # print('features:', features.grad_fn)
         im_z[mask == False] = 0
 
         count[batch_ind] = mask.sum(dim=0).float()
-        # print('\tcount:', count.shape)
+        # print('\tcount:', count.grad_fn)
         # print('\t'+ '-'*20)
 
         # aggregate multi view
