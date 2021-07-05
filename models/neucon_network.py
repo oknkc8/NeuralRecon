@@ -168,8 +168,6 @@ class NeuConNet(nn.Module):
             # print('KRcam:', KRcam.shape)
             volume, count = back_project(up_coords, inputs['vol_origin_partial'], self.cfg.VOXEL_SIZE, feats,
                                          KRcam)
-            # print('volume:', volume.shape)
-            # print('count:', count.shape)
             grid_mask = count > 1
 
             """ ----concat feature from last stage---- """
@@ -178,7 +176,6 @@ class NeuConNet(nn.Module):
                 feat = torch.cat([volume, up_feat], dim=1)
             else:
                 feat = volume
-            # print('feat:', feat.shape)
 
             if not self.cfg.FUSION.FUSION_ON:
                 tsdf_target, occ_target = self.get_target(up_coords, inputs, scale)
@@ -236,15 +233,21 @@ class NeuConNet(nn.Module):
                 loss = self.compute_loss(tsdf, occ, tsdf_target, occ_target,
                                          mask=grid_mask,
                                          pos_weight=self.cfg.POS_WEIGHT)
-                projection_loss, depths, depths_target = projection_2d_loss(up_coords, inputs['vol_origin_partial'], self.cfg.VOXEL_SIZE, 
-                                                                            tsdf, depths, depth_KRcam)
-                loss += projection_loss
+                
+                if self.cfg.PROJECTION.LOSS:
+                    projection_loss, depths, depths_target, depths_target_masked = projection_2d_loss(self.cfg, up_coords, inputs['vol_origin_partial'],
+                                                                                                      self.cfg.VOXEL_SIZE, tsdf, depths, depth_KRcam)
+                    loss += projection_loss
             else:
                 loss = torch.Tensor(np.array([0]))[0]
             loss_dict.update({f'tsdf_occ_loss_{i}': loss})
-            loss_dict[f'projection_loss'] += projection_loss
-            image_dict.update({f'projection_depth_{i}': depths})
-            image_dict.update({f'projection_depth_target_{i}': depths_target})
+
+            if self.cfg.PROJECTION.LOSS:
+                loss_dict[f'projection_loss'] += projection_loss
+                image_dict.update({f'projection_depth_{i}': depths})
+                image_dict.update({f'projection_depth_target_masked{i}': depths_target_masked})
+                if i==0:
+                    image_dict.update({f'projection_depth_target': depths_target})
             
 
 

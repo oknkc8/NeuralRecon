@@ -4,6 +4,7 @@ SAVE_SCENE_MESH: False
 LOGDIR: './checkpoints'
 SAVE_FREQ: 1
 MODE: 'train'
+#LOADCKPT: './checkpoints/best_model/model_000047.ckpt'
 
 TRAIN:
   #PATH: '../data/DATAROOT_SCANNET/scannet'
@@ -11,7 +12,7 @@ TRAIN:
   EPOCHS: 991
   N_VIEWS: 9
   LR: 1e-3
-  N_WORKERS: 64
+  N_WORKERS: 8
   LREPOCHS: '12,24,48:2'
 
 TEST:
@@ -37,7 +38,11 @@ MODEL:
     AVERAGE: False
     FULL: True
 
-  DEPTH_LOSS: False
+  PROJECTION:
+    LOSS: True
+    LOSS_WEIGHT: 1
+    THRESHOLD: 0.5
+    UPSCALE: 2
 
   LW: [1.0, 1.0, 0.8, 0.64]
 

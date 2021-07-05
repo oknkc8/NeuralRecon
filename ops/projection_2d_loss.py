@@ -3,7 +3,7 @@ import torch.nn.functional as F
 from torch.nn.functional import grid_sample
 
 
-def projection_2d_loss(coords, origin, voxel_size, tsdf, depth_target, KRcam):
+def projection_2d_loss(cfg, coords, origin, voxel_size, tsdf, depth_target, KRcam):
     '''
     Unproject the image fetures to form a 3D (sparse) feature volume
 
@@ -21,25 +21,13 @@ def projection_2d_loss(coords, origin, voxel_size, tsdf, depth_target, KRcam):
     :return: count: number of times each voxel can be seen
     dim: (num of voxels,)
     '''
-    #n_views, bs, c, h, w = feats.shape
 
     bs, n_views, h, w = depth_target.shape
-
-    # print()
-    # print('\t'+'='*10 + 'projection_2d_loss' + '='*10)
-    # print('\tn_views:', n_views)
-    # print('\tbs:', bs)
-    # print('\th:', h)
-    # print('\tw:', w)
-
-    # feature_volume_all = torch.zeros(coords.shape[0], c + 1).cuda()
-    # count = torch.zeros(coords.shape[0]).cuda()
-    # print('\tfeature_volume_all:', feature_volume_all.shape)
-    # print('\tcount:', count.shape)
 
     loss = 0
     depths = []
     depths_target = []
+    depths_target_masked = []
     for batch in range(bs):
         # print('\t=======================')
         # print('\tbatch:', batch)
@@ -54,11 +42,13 @@ def projection_2d_loss(coords, origin, voxel_size, tsdf, depth_target, KRcam):
         origin_batch = origin[batch].unsqueeze(0)
         #feats_batch = feats[:, batch]
         depth_target_batch = depth_target[batch]
+        #print('KRcam:', KRcam)
         proj_batch = KRcam[:, batch]
+        #print('proj_batch:', proj_batch)
 
         # print('\tcoords_batch:', coords_batch.shape)
         # print('\torigin_batch:', origin_batch.shape)
-        # print('\tproj_batch:', proj_batch.shape)
+        #print('\tproj_batch:', proj_batch.shape)
         # print('\t'+ '-'*20)
 
         grid_batch = coords_batch * voxel_size + origin_batch.float()
@@ -81,7 +71,6 @@ def projection_2d_loss(coords, origin, voxel_size, tsdf, depth_target, KRcam):
         # print('\t'+ '-'*20)
 
         im_grid = torch.stack([2 * im_x / (w - 1) - 1, 2 * im_y / (h - 1) - 1], dim=-1)
-        # print('\tim_grid:', im_grid.shape)
         mask = im_grid.abs() <= 1
         # print('\tmask:', mask.shape)
         mask = (mask.sum(dim=-1) == 2) & (im_z > 0)     # mask.sum(dim=-1) == 2 : both im_x and im_y is positive and less than 1 
@@ -104,66 +93,75 @@ def projection_2d_loss(coords, origin, voxel_size, tsdf, depth_target, KRcam):
         im_z = im_z.view(n_views, -1)
         im_z[mask == False] = 0
 
-        
+        # print('im_x:', im_x.grad_fn)        
 
-        im_x = (im_x / 2 + 0.5) * h
-        im_y = (im_y / 2 + 0.5) * w
 
-        # print()
-        # print('im_x:', im_x[mask])
-        # print()
-        # print('im_y:', im_y[mask])
-        # print()
+        im_x = (im_x / 2 + 0.5) * w
+        im_y = (im_y / 2 + 0.5) * h
 
-        # print('\tim_z:', im_z.shape)
-        # print('\t'+ '-'*20)
+        tsdf_mask = tsdf.abs() <= cfg.PROJECTION.THRESHOLD
+        #print('tsdf:', tsdf.is_leaf)
+        tsdf_mask = tsdf_mask.permute(1, 0)
+        tsdf_mask = tsdf_mask.expand(n_views, -1)
+        #print('tsdf_mask:', tsdf_mask.grad_fn)
 
-        # print('tsdf:', tsdf.shape)
 
-        tsdf_threshold = 0.1
-        upscale = 2
-        tsdf_mask = tsdf.abs() <= tsdf_threshold
-        tsdf_mask = tsdf_mask.permute(1, 0).expand(n_views, -1)
-        # print('tsdf_mask:', tsdf_mask.shape)
+        """
+            connect gradient flow for im_z(depth) and tsdf value
+        """
+        diff_im_z = tsdf.permute(1,0)
+        diff_im_z = diff_im_z.expand(n_views, -1).clone()
+        diff_im_z[diff_im_z.abs() <= cfg.PROJECTION.THRESHOLD] = 1
+        diff_im_z[diff_im_z.abs() <= cfg.PROJECTION.THRESHOLD] = 0
+
+        im_z = diff_im_z * im_z
 
         new_mask = mask & tsdf_mask
 
-        im_x = im_x[new_mask]
-        im_y = im_y[new_mask]
-        im_z = im_z[new_mask]
+        upscale_depth = []
+        for view_idx in range(n_views):
+            view_new_mask = new_mask[view_idx]
+            view_im_x = im_x[view_idx]
+            view_im_y = im_y[view_idx]
+            view_im_z = im_z[view_idx]
+
+            view_im_x = view_im_x[view_new_mask]
+            view_im_y = view_im_y[view_new_mask]
+            view_im_z = view_im_z[view_new_mask]
+
+            view_upscale_depth = torch.ones([h * cfg.PROJECTION.UPSCALE + 1, w * cfg.PROJECTION.UPSCALE + 1]).cuda()
+            view_upscale_depth *= 100            
+
+            view_im_x = (view_im_x * cfg.PROJECTION.UPSCALE).round().long()
+            view_im_y = (view_im_y * cfg.PROJECTION.UPSCALE).round().long()
+
+            view_im_x = view_im_x.view(-1)
+            view_im_y = view_im_y.view(-1)
+            view_im_z = view_im_z.view(-1)
+
+            view_upscale_depth[view_im_y, view_im_x] = view_im_z
+
+            upscale_depth.append(view_upscale_depth)
+
+        upscale_depth = torch.stack(upscale_depth, dim=0)
 
         # im_z 미리 normalize 필요!
         # 필요하면 depth_target도 미리 normalize 필요
 
-        upscale_depth = torch.zeros([n_views, h * upscale + 1, w * upscale + 1]).cuda()
+        downscale_depth = -1 * F.adaptive_max_pool2d(-1 * upscale_depth, output_size = (h, w))
+        downscale_depth[downscale_depth == 100] = 0
 
-        im_x = (im_x * upscale).round().long()
-        im_y = (im_y * upscale).round().long()
+        target_mask = (downscale_depth != 0)
 
-        im_x = im_x.view(-1)
-        im_y = im_y.view(-1)
-        im_z = im_z.view(-1)
+        depths_target_masked_batch = depth_target_batch * target_mask
 
-        # print('im_x:', im_x.shape)
-        # print('im_y:', im_y.shape)
-        # print('im_z:', im_z.shape)
-
-        # print('upscale_depth:', upscale_depth.shape)
-
-
-        upscale_depth[:, im_x, im_y] = im_z
-
-        downscale_depth = F.adaptive_max_pool2d(upscale_depth, output_size = (h, w))
-
-        # print('downscale_depth:', downscale_depth.shape)
-        # print(downscale_depth.unique())
-        # print(depth_target_batch.unique())
-
-        loss += F.l1_loss(downscale_depth, depth_target_batch)
+        loss += (F.l1_loss(downscale_depth, depths_target_masked_batch) * cfg.PROJECTION.LOSS_WEIGHT)
 
         depths.append(downscale_depth)
         depths_target.append(depth_target_batch)
+        depths_target_masked.append(depths_target_masked_batch)
 
     depths = torch.stack(depths, dim=0)
     depths_target = torch.stack(depths_target, dim=0)
-    return loss, depths, depths_target
+    depths_target_masked = torch.stack(depths_target_masked, dim=0)
+    return loss, depths, depths_target, depths_target_masked
