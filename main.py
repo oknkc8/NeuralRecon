@@ -79,7 +79,7 @@ torch.cuda.manual_seed(cfg.SEED)
 
 # create logger
 if is_main_process():
-    timestamp = datetime.datetime.now().strftime("%m-%d-%H-%M")
+    timestamp = (datetime.datetime.utcnow() + datetime.timedelta(hours=9)).strftime("%m-%d-%H-%M")
 
     if not os.path.isdir(os.path.join(cfg.LOGDIR, timestamp)):
         os.makedirs(os.path.join(cfg.LOGDIR, timestamp))
@@ -213,10 +213,14 @@ def train():
                                                                                          batch_idx,
                                                                                          len(TrainImgLoader), loss,
                                                                                          time.time() - start_time))
-            if do_summary and is_main_process():
+
+            if is_main_process():
                 save_scalars(tb_writer, 'train', scalar_outputs, global_step)
-                save_images(tb_writer, 'train', image_outputs, global_step)
+                if do_summary:
+                    save_images(tb_writer, 'train', image_outputs, global_step)
+
             del scalar_outputs
+            del image_outputs
 
 
         # checkpoint
@@ -225,7 +229,7 @@ def train():
                 'epoch': epoch_idx,
                 'model': model.state_dict(),
                 'optimizer': optimizer.state_dict()},
-                "{}/model_{:0>6}.ckpt".format(cfg.LOGDIR, epoch_idx))
+                "{}/model_{:0>6}.ckpt".format(os.path.join(cfg.LOGDIR, timestamp), epoch_idx))
 
 
 def test(from_latest=False):

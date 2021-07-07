@@ -7,8 +7,8 @@ MODE: 'train'
 #LOADCKPT: './checkpoints/best_model/model_000047.ckpt'
 
 TRAIN:
-  #PATH: '../data/DATAROOT_SCANNET/scannet'
-  PATH: '/scannet/DATAROOT_SCANNET/scannet'
+  PATH: '../data/DATAROOT_SCANNET/scannet'
+  #PATH: '/scannet/DATAROOT_SCANNET/scannet'
   EPOCHS: 991
   N_VIEWS: 9
   LR: 1e-3
@@ -16,8 +16,8 @@ TRAIN:
   LREPOCHS: '12,24,48:2'
 
 TEST:
-  #PATH: '../data/DATAROOT_SCANNET/scannet'
-  PATH: '/scannet/DATAROOT_SCANNET/scannet'
+  PATH: '../data/DATAROOT_SCANNET/scannet'
+  #PATH: '/scannet/DATAROOT_SCANNET/scannet'
   N_VIEWS: 9
   N_WORKERS: 4
 
@@ -42,7 +42,7 @@ MODEL:
     LOSS: True
     LOSS_WEIGHT: 1
     THRESHOLD: 0.5
-    UPSCALE: 2
+    UPSCALE: 5
 
   LW: [1.0, 1.0, 0.8, 0.64]
 
