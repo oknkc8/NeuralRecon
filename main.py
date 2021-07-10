@@ -258,8 +258,10 @@ def test(from_latest=False):
                     for n in sample['fragment']:
                         logger.info(n)
                     # save mesh if SAVE_SCENE_MESH and is the last fragment
-                    # save_scene = cfg.SAVE_SCENE_MESH and batch_idx == batch_len - 1
-                    save_scene = True
+                    save_scene = cfg.SAVE_SCENE_MESH and batch_idx == batch_len - 1
+                    save_scene = save_scene and cfg.SAVE_SCENE_MESH_ITER
+
+                    n = sample['fragment'][-1]
 
                     start_time = time.time()
                     loss, scalar_outputs, outputs = test_sample(sample, save_scene)
@@ -301,7 +303,7 @@ def train_sample(sample):
 def test_sample(sample, save_scene=False):
     model.eval()
 
-    outputs, loss_dict = model(sample, save_scene)
+    outputs, loss_dict, _ = model(sample, save_scene)
     loss = loss_dict['total_loss']
 
     return tensor2float(loss), tensor2float(loss_dict), outputs
