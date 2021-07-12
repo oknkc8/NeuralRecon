@@ -124,6 +124,9 @@ def process(scene, total_scenes_index, total_scenes_count):
         color_type=o3d.pipelines.integration.TSDFVolumeColorType.RGB8)
 
     mesh_file = os.path.join(save_path, '%s.ply' % scene.replace('/', '-'))
+    if not os.path.exists(mesh_file):
+        return scene, None
+
     mesh = trimesh.load(mesh_file, process=False)
     # mesh renderer
     renderer = Renderer()

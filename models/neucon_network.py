@@ -262,7 +262,7 @@ class NeuConNet(nn.Module):
 
             if num == 0:
                 logger.warning('no valid points: scale {}'.format(i))
-                return outputs, loss_dict
+                return outputs, loss_dict, image_dict
 
             """ ------avoid out of memory: sample points if num of points is too large----- """
             # print('-'*10 + 'avoid out of memory: sample points if num of points is too large' + '-'*10)
@@ -281,7 +281,7 @@ class NeuConNet(nn.Module):
                 batch_ind = torch.nonzero(pre_coords[:, 0] == b).squeeze(1)
                 if len(batch_ind) == 0:
                     logger.warning('no valid points: scale {}, batch {}'.format(i, b))
-                    return outputs, loss_dict
+                    return outputs, loss_dict, image_dict
 
             pre_feat = feat[occupancy]
             pre_tsdf = tsdf[occupancy]
