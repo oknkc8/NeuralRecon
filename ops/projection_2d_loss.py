@@ -148,14 +148,23 @@ def projection_2d_loss(cfg, coords, origin, voxel_size, tsdf, depth_target, KRca
         # im_z 미리 normalize 필요!
         # 필요하면 depth_target도 미리 normalize 필요
 
+        
+
         downscale_depth = -1 * F.adaptive_max_pool2d(-1 * upscale_depth, output_size = (h, w))
         downscale_depth[downscale_depth == 100] = 0
 
-        target_mask = (downscale_depth != 0)
+        #target_mask = (downscale_depth != 0)    # only regressed depth
+        #target_mask = (depth_target_batch != 0)     # only gt depth
+        target_mask = (downscale_depth != 0) & (depth_target_batch != 0) # both
 
         depths_target_masked_batch = depth_target_batch * target_mask
+        downscale_depth_masked = downscale_depth * target_mask
 
-        loss += (F.l1_loss(downscale_depth, depths_target_masked_batch) * cfg.PROJECTION.LOSS_WEIGHT)
+        downscale_depth_masked = F.normalize(downscale_depth_masked, dim=0)
+        depths_target_masked_batch = F.normalize(depths_target_masked_batch, dim=0)
+
+        #loss += (F.l1_loss(downscale_depth, depths_target_masked_batch) * cfg.PROJECTION.LOSS_WEIGHT)
+        loss += (F.l1_loss(downscale_depth_masked, depths_target_masked_batch) * cfg.PROJECTION.LOSS_WEIGHT)
 
         depths.append(downscale_depth)
         depths_target.append(depth_target_batch)
