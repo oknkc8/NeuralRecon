@@ -3,7 +3,7 @@ import torch.nn.functional as F
 from torch.nn.functional import grid_sample
 
 
-def projection_2d_loss(cfg, coords, origin, voxel_size, tsdf, depth_target, KRcam):
+def projection_2d_loss(cfg, coords, origin, voxel_size, tsdf, depth_target, feats, KRcam):
     '''
     Unproject the image fetures to form a 3D (sparse) feature volume
 
@@ -23,6 +23,7 @@ def projection_2d_loss(cfg, coords, origin, voxel_size, tsdf, depth_target, KRca
     '''
 
     bs, n_views, h, w = depth_target.shape
+    _, _, _, h_feat, w_feat = feats.shape
 
     loss = 0
     depths = []
@@ -66,11 +67,20 @@ def projection_2d_loss(cfg, coords, origin, voxel_size, tsdf, depth_target, KRca
         im_p = proj_batch @ rs_grid
         # print('\tim_p:', im_p.shape)
         im_x, im_y, im_z = im_p[:, 0], im_p[:, 1], im_p[:, 2]
+
+        # print('im_x:', im_x.shape)
+        # print('im_x unique:', im_x.unique())
+        # print('im_y:', im_y.shape)
+        # print('im_y unique:', im_y.unique())
+        # print('im_z:', im_z.shape)
+        # print('im_z unique:', im_z.unique())
+
+
         im_x = im_x / im_z      # normalize x, y
         im_y = im_y / im_z
         # print('\t'+ '-'*20)
 
-        im_grid = torch.stack([2 * im_x / (w - 1) - 1, 2 * im_y / (h - 1) - 1], dim=-1)
+        im_grid = torch.stack([2 * im_x / (w_feat - 1) - 1, 2 * im_y / (h_feat - 1) - 1], dim=-1)
         mask = im_grid.abs() <= 1
         # print('\tmask:', mask.shape)
         mask = (mask.sum(dim=-1) == 2) & (im_z > 0)     # mask.sum(dim=-1) == 2 : both im_x and im_y is positive and less than 1 
@@ -96,14 +106,21 @@ def projection_2d_loss(cfg, coords, origin, voxel_size, tsdf, depth_target, KRca
         # print('im_x:', im_x.grad_fn)        
 
 
-        im_x = (im_x / 2 + 0.5) * w
-        im_y = (im_y / 2 + 0.5) * h
+        im_x = (im_x / 2 + 0.5) * w_feat
+        im_y = (im_y / 2 + 0.5) * h_feat
 
+        mask[im_x.round() >= w_feat] = False
+        mask[im_y.round() >= h_feat] = False
+
+        
         tsdf_mask = tsdf.abs() <= cfg.PROJECTION.THRESHOLD
-        #print('tsdf:', tsdf.is_leaf)
+        # tmp = torch.unique(tsdf.view(-1))
+        # print('tsdf:', torch.sort(tsdf.view(-1)).values)
+        #print('tsdf:', torch.unique(tsdf.view(-1)))
         tsdf_mask = tsdf_mask.permute(1, 0)
         tsdf_mask = tsdf_mask.expand(n_views, -1)
         #print('tsdf_mask:', tsdf_mask.grad_fn)
+        # print('tsdf_mask:', tsdf_mask.sum())
 
 
         """
@@ -112,12 +129,13 @@ def projection_2d_loss(cfg, coords, origin, voxel_size, tsdf, depth_target, KRca
         diff_im_z = tsdf.permute(1,0)
         diff_im_z = diff_im_z.expand(n_views, -1).clone()
         diff_im_z[diff_im_z.abs() <= cfg.PROJECTION.THRESHOLD] = 1
-        diff_im_z[diff_im_z.abs() <= cfg.PROJECTION.THRESHOLD] = 0
+        diff_im_z[diff_im_z != 1] = 0
 
         im_z = diff_im_z * im_z
 
         new_mask = mask & tsdf_mask
 
+        tsdf = tsdf.squeeze()
         upscale_depth = []
         for view_idx in range(n_views):
             view_new_mask = new_mask[view_idx]
@@ -129,17 +147,28 @@ def projection_2d_loss(cfg, coords, origin, voxel_size, tsdf, depth_target, KRca
             view_im_y = view_im_y[view_new_mask]
             view_im_z = view_im_z[view_new_mask]
 
-            view_upscale_depth = torch.ones([h * cfg.PROJECTION.UPSCALE + 1, w * cfg.PROJECTION.UPSCALE + 1]).cuda()
+            view_upscale_depth = torch.ones([h_feat * cfg.PROJECTION.UPSCALE + 1, w_feat * cfg.PROJECTION.UPSCALE + 1]).cuda()
+            # print('view_upscale_depth:', view_upscale_depth.shape)
             view_upscale_depth *= 100            
 
+            # print('max im x:', view_im_x.max())
+            # print('min im x:', view_im_x.min())
+            # print('max im y:', view_im_y.max())
+            # print('min im y:', view_im_y.min())
+            # print('view_im_x:', view_im_x.unique())
+            # print('view_im_y:', view_im_y.unique())
             view_im_x = (view_im_x * cfg.PROJECTION.UPSCALE).round().long()
             view_im_y = (view_im_y * cfg.PROJECTION.UPSCALE).round().long()
+
+            # print('view_im_x:', view_im_x.unique())
+            # print('view_im_y:', view_im_y.unique())
 
             view_im_x = view_im_x.view(-1)
             view_im_y = view_im_y.view(-1)
             view_im_z = view_im_z.view(-1)
 
             view_upscale_depth[view_im_y, view_im_x] = view_im_z
+            
 
             upscale_depth.append(view_upscale_depth)
 
@@ -149,9 +178,30 @@ def projection_2d_loss(cfg, coords, origin, voxel_size, tsdf, depth_target, KRca
         # 필요하면 depth_target도 미리 normalize 필요
 
         
-
-        downscale_depth = -1 * F.adaptive_max_pool2d(-1 * upscale_depth, output_size = (h, w))
+        
+        downscale_depth = -1 * F.adaptive_max_pool2d(-1 * upscale_depth, output_size = (h_feat, w_feat))
         downscale_depth[downscale_depth == 100] = 0
+
+        downscale_depth = downscale_depth.unsqueeze(1)
+        depth_target_batch = depth_target_batch.unsqueeze(1)
+        # print('downscale_depth:',downscale_depth.shape)
+        # print('depth_target_batch:',depth_target_batch.shape)
+
+        #depth_target_batch = F.interpolate(depth_target_batch, size=[h_feat, w_feat])
+
+        downscale_depth = F.interpolate(downscale_depth, size=[h, w])
+        # print('depth_target_batch:',depth_target_batch.shape)
+
+        downscale_depth = downscale_depth.squeeze(1)
+        depth_target_batch = depth_target_batch.squeeze(1)
+        # print('downscale_depth:',downscale_depth.shape)
+        # print('depth_target_batch:',depth_target_batch.shape)
+        """
+        downscale_depth = upscale_depth
+        downscale_depth[downscale_depth == 100] = 0
+        print('downscale_dpeth:',downscale_depth.grad_fn)
+        print('=====')
+        """
 
         #target_mask = (downscale_depth != 0)    # only regressed depth
         #target_mask = (depth_target_batch != 0)     # only gt depth
