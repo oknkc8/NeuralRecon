@@ -44,7 +44,7 @@ def make_recursive_func(func):
 
 @make_recursive_func
 def tensor2float(vars):
-    if isinstance(vars, float):
+    if isinstance(vars, float) or vars == 0:
         return vars
     elif isinstance(vars, torch.Tensor):
         if len(vars.shape) == 0:
@@ -52,7 +52,7 @@ def tensor2float(vars):
         else:
             return [v.data.item() for v in vars]
     else:
-        raise NotImplementedError("invalid input type {} for tensor2float".format(type(vars)))
+        raise NotImplementedError("invalid input type {} for tensor2float {}".format(type(vars), vars))
 
 
 @make_recursive_func
@@ -95,7 +95,7 @@ def save_images(logger, mode, images_dict, global_step):
             raise NotImplementedError("invalid img shape {}:{} in save_images".format(name, img.shape))
         if len(img.shape) == 3:
             img = img[:, np.newaxis, :, :]
-        img = torch.from_numpy(img[:1])
+        img = torch.from_numpy(img)
         img = img.permute(1,0,2,3)
         return vutils.make_grid(img, padding=0, nrow=1, normalize=True, scale_each=True)
 
