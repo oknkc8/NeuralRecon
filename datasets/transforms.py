@@ -106,8 +106,8 @@ class IntrinsicsPoseToProjection(object):
         data['proj_matrices'] = torch.stack(proj_matrices)
         data['depth_proj_matrices'] = torch.stack(depth_proj_matrices)
 
-        data.pop('intrinsics')
-        data.pop('extrinsics')
+        # data.pop('intrinsics')
+        # data.pop('extrinsics')
         return data
 
 

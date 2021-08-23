@@ -11,6 +11,8 @@ from .gru_fusion import GRUFusion
 from ops.back_project import back_project
 from ops.generate_grids import generate_grid
 from ops.projection_2d_loss import projection_2d_loss
+from ops.projection_tsdf_loss import fov_tsdf_loss
+from ops.differentiable_renderer import diff_renderer
 
 
 class NeuConNet(nn.Module):
@@ -44,7 +46,16 @@ class NeuConNet(nn.Module):
                        dropout=self.cfg.SPARSEREG.DROPOUT)
             )
             self.tsdf_preds.append(nn.Linear(channels[i], 1))
+            # self.tsdf_preds.append(nn.Sequential(
+            #                         nn.Linear(channels[i], 1),
+            #                         nn.Tanh()
+            #                     ))
             self.occ_preds.append(nn.Linear(channels[i], 1))
+            # self.occ_preds.append(nn.Sequential(
+            #                         nn.Linear(channels[i], 1),
+            #                         nn.Sigmoid()
+            #                     ))
+        
 
     def get_target(self, coords, inputs, scale):
         '''
@@ -123,7 +134,9 @@ class NeuConNet(nn.Module):
         pre_feat = None
         pre_coords = None
         loss_dict = {}
-        loss_dict[f'projection_loss'] = 0
+        loss_dict[f'projection_loss'] = 0.0
+        loss_dict[f'fov_tsdf_loss'] = 0.0
+        loss_dict[f'rerender_loss'] = 0.0
         image_dict = {}
         """ ----coarse to fine---- """
         for i in range(self.cfg.N_LAYER):
@@ -223,8 +236,10 @@ class NeuConNet(nn.Module):
             # print('occ:', occ.shape)
 
             """ -------compute loss------- """
-            depths = inputs['depth']
+            depths_gt = inputs['depth']
             depth_KRcam = inputs['depth_proj_matrices'][:, :, scale].permute(1, 0, 2, 3).contiguous()
+            intrinsics = inputs['intrinsics']
+            extrinsics = inputs['extrinsics']
 
             # print('tsdf_target:', tsdf_target.shape)                
             # print('tsdf_target:', tsdf_target.unique())
@@ -234,21 +249,34 @@ class NeuConNet(nn.Module):
                                          mask=grid_mask,
                                          pos_weight=self.cfg.POS_WEIGHT)
                 
-                if self.cfg.PROJECTION.LOSS:
-                    projection_loss, depths, depths_target, depths_target_masked = projection_2d_loss(self.cfg, up_coords, inputs['vol_origin_partial'],
-                                                                                                      self.cfg.VOXEL_SIZE, tsdf, depths, depth_KRcam)
-                    loss += projection_loss
+                if i == self.cfg.N_LAYER - 1:
+                    if self.cfg.RERENDER.LOSS:
+                        rerender_loss, depths, depths_target = diff_renderer(self.cfg, up_coords, inputs['vol_origin_partial'], self.cfg.VOXEL_SIZE, tsdf, 
+                                                                                depths_gt, feats, intrinsics, extrinsics)
+                        loss += rerender_loss
+                        loss_dict[f'rerender_loss'] += rerender_loss    
+                        image_dict.update({f'depth': depths})
+                        image_dict.update({f'depth_target': depths_target})
+
+                    if self.cfg.PROJECTION.LOSS:
+                        projection_loss, depths, depths_target, depths_target_masked = projection_2d_loss(self.cfg, up_coords, inputs['vol_origin_partial'],
+                                                                                                        self.cfg.VOXEL_SIZE, tsdf, depths_gt, feats, KRcam)
+                        loss += projection_loss
+
+                        loss_dict[f'projection_loss'] += projection_loss
+                        image_dict.update({f'projection_depth_{i}': depths})
+                        image_dict.update({f'projection_depth_target_masked{i}': depths_target_masked})
+                        image_dict.update({f'projection_depth_target': depths_target})
+
+                    if self.cfg.FOV_TSDF_LOSS.LOSS:
+                        fov_loss = fov_tsdf_loss(self.cfg, up_coords, inputs['vol_origin_partial'],
+                                                        self.cfg.VOXEL_SIZE, tsdf, tsdf_target, grid_mask, KRcam, feats)
+                        
+                        loss += fov_loss
+                        loss_dict[f'fov_tsdf_loss'] += fov_loss
             else:
                 loss = torch.Tensor(np.array([0]))[0]
             loss_dict.update({f'tsdf_occ_loss_{i}': loss})
-
-            if self.cfg.PROJECTION.LOSS:
-                loss_dict[f'projection_loss'] += projection_loss
-                image_dict.update({f'projection_depth_{i}': depths})
-                image_dict.update({f'projection_depth_target_masked{i}': depths_target_masked})
-                if i==0:
-                    image_dict.update({f'projection_depth_target': depths_target})
-            
 
 
             """ ------define the sparsity for the next stage----- """
@@ -274,6 +302,7 @@ class NeuConNet(nn.Module):
                                           replace=False)
                 ind = torch.nonzero(occupancy)
                 occupancy[ind[choice]] = False
+                # print('choice:', choice.shape)
 
             pre_coords = up_coords[occupancy]
             # print('pre_coords:', pre_coords.shape)
@@ -287,6 +316,8 @@ class NeuConNet(nn.Module):
             pre_tsdf = tsdf[occupancy]
             pre_occ = occ[occupancy]
 
+            # print('-'*20)
+            # print(i)
             # print('pre_feat:', pre_feat.shape)
             # print('pre_tsdf:', pre_tsdf.shape)
             # print('pre_occ:', pre_occ.shape)
@@ -295,8 +326,16 @@ class NeuConNet(nn.Module):
             # print('pre_feat:', pre_feat.shape)
 
             if i == self.cfg.N_LAYER - 1:
+                # print('-'*20)
                 outputs['coords'] = pre_coords
                 outputs['tsdf'] = pre_tsdf
+                #outputs['tsdf'] = tsdf_target[occ_target.squeeze(1) > self.cfg.THRESHOLDS[i]]
+                # print('pre_tsdf:', pre_tsdf.shape)
+                # print('tsdf_target:', tsdf_target.shape)
+                # print('tsdf:', tsdf.shape)
+                # print('occupancy:', occupancy.shape)
+                # print('occ:', occ.shape)
+                # print('occ_target:', occ_target.shape)
 
         return outputs, loss_dict, image_dict
 

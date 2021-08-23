@@ -83,6 +83,8 @@ class NeuralRecon(nn.Module):
         # in: image feature; out: sparse coords and tsdf
         outputs, loss_dict, image_dict = self.neucon_net(features, inputs, outputs)
 
+        image_dict.update({'input_images' : torch.cat(imgs, dim=0).permute(1,0,2,3)})
+
         # fuse to global volume.
         if not self.training and 'coords' in outputs.keys():
             outputs = self.fuse_to_global(outputs['coords'], outputs['tsdf'], inputs, self.n_scales, outputs, save_mesh)
