@@ -37,7 +37,7 @@ class RayCastRGBDFunction(Function):
 
 
 class RaycastRGBD(nn.Module):
-    def __init__(self, batch_size, dims3d, width, height, depth_min, depth_max, thresh_sample_dist, ray_increment, origin, voxel_size, max_num_frames=1, max_num_locs_per_sample=200000, max_pixels_per_voxel=64):#32):
+    def __init__(self, batch_size, dims3d, width, height, depth_min, depth_max, thresh_sample_dist, ray_increment, voxel_size, max_num_frames=1, max_num_locs_per_sample=200000, max_pixels_per_voxel=64):#32):
         super(RaycastRGBD, self).__init__()
         #TODO CAN MAKE THIS TRIVIALLY MORE MEMORY EFFICIENT
         self.dims3d = dims3d
@@ -47,7 +47,6 @@ class RaycastRGBD(nn.Module):
         self.depth_max = depth_max
         self.thresh_sample_dist = thresh_sample_dist
         self.ray_increment = ray_increment
-        self.origin = origin
         self.voxel_size = voxel_size
         self.max_num_locs_per_sample = max_num_locs_per_sample
         # pre-allocate raycast_color outputs
@@ -64,9 +63,9 @@ class RaycastRGBD(nn.Module):
     def get_max_num_locs_per_sample(self):
         return self.max_num_locs_per_sample
     
-    def forward(self, locs, vals_sdf, vals_colors, vals_normals, view_matrix, intrinsic_params):
+    def forward(self, locs, vals_sdf, vals_colors, vals_normals, view_matrix, intrinsic_params, origin):
         return RayCastRGBDFunction.apply(locs, vals_sdf, vals_colors, vals_normals, view_matrix, intrinsic_params, self.dims3d, self.width, self.height, self.depth_min, self.depth_max, self.thresh_sample_dist, self.ray_increment, 
-                                        self.image_color, self.image_depth, self.image_normal, self.sparse_mapping, self.mapping3dto2d, self.mapping3dto2d_num, self.d_color, self.d_depth, self.d_normal, self.origin, self.voxel_size)
+                                        self.image_color, self.image_depth, self.image_normal, self.sparse_mapping, self.mapping3dto2d, self.mapping3dto2d_num, self.d_color, self.d_depth, self.d_normal, origin, self.voxel_size)
 
 
 class RaycastOcc(nn.Module):

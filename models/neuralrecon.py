@@ -23,7 +23,7 @@ class NeuralRecon(nn.Module):
 
         # networks
         self.backbone2d = MnasMulti(alpha)
-        self.neucon_net = NeuConNet(cfg.MODEL)
+        self.neucon_net = NeuConNet(cfg)
         # for fusing to global volume
         self.fuse_to_global = GRUFusion(cfg.MODEL, direct_substitute=True)
 

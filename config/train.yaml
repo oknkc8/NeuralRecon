@@ -6,7 +6,7 @@ SAVE_FREQ: 1
 SUMMARY_FREQ: 20
 MODE: 'train'
 # LOADCKPT: './checkpoints/08-19-03-40(original_part_1)/model_000020.ckpt'
-LOADCKPT: './checkpoints/08-20-13-03(original_part_2)/model_000030.ckpt'
+LOADCKPT: './checkpoints/08-20-13-03(original_part_2)/model_000035.ckpt'
 
 TRAIN:
   PATH: '../data/DATAROOT_SCANNET/scannet'

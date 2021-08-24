@@ -12,7 +12,8 @@ from ops.back_project import back_project
 from ops.generate_grids import generate_grid
 from ops.projection_2d_loss import projection_2d_loss
 from ops.projection_tsdf_loss import fov_tsdf_loss
-from ops.differentiable_renderer import diff_renderer
+#from ops.differentiable_renderer import diff_renderer
+from ops.differentiable_renderer import DiffRenderer
 
 
 class NeuConNet(nn.Module):
@@ -23,27 +24,27 @@ class NeuConNet(nn.Module):
     def __init__(self, cfg):
         super(NeuConNet, self).__init__()
         self.cfg = cfg
-        self.n_scales = len(cfg.THRESHOLDS) - 1
+        self.n_scales = len(cfg.MODEL.THRESHOLDS) - 1
 
-        alpha = int(self.cfg.BACKBONE2D.ARC.split('-')[-1])
+        alpha = int(self.cfg.MODEL.BACKBONE2D.ARC.split('-')[-1])
         ch_in = [80 * alpha + 1, 96 + 40 * alpha + 2 + 1, 48 + 24 * alpha + 2 + 1, 24 + 24 + 2 + 1]
         channels = [96, 48, 24]
 
-        if self.cfg.FUSION.FUSION_ON:
+        if self.cfg.MODEL.FUSION.FUSION_ON:
             # GRU Fusion
-            self.gru_fusion = GRUFusion(cfg, channels)
+            self.gru_fusion = GRUFusion(cfg.MODEL, channels)
         # sparse conv
         self.sp_convs = nn.ModuleList()
         # MLPs that predict tsdf and occupancy.
         self.tsdf_preds = nn.ModuleList()
         self.occ_preds = nn.ModuleList()
-        for i in range(len(cfg.THRESHOLDS)):
+        for i in range(len(cfg.MODEL.THRESHOLDS)):
             self.sp_convs.append(
                 SPVCNN(num_classes=1, in_channels=ch_in[i],
                        pres=1,
                        cr=1 / 2 ** i,
-                       vres=self.cfg.VOXEL_SIZE * 2 ** (self.n_scales - i),
-                       dropout=self.cfg.SPARSEREG.DROPOUT)
+                       vres=self.cfg.MODEL.VOXEL_SIZE * 2 ** (self.n_scales - i),
+                       dropout=self.cfg.MODEL.SPARSEREG.DROPOUT)
             )
             self.tsdf_preds.append(nn.Linear(channels[i], 1))
             # self.tsdf_preds.append(nn.Sequential(
@@ -55,6 +56,8 @@ class NeuConNet(nn.Module):
             #                         nn.Linear(channels[i], 1),
             #                         nn.Sigmoid()
             #                     ))
+        
+        self.raycaster = DiffRenderer(cfg)
         
 
     def get_target(self, coords, inputs, scale):
@@ -139,7 +142,7 @@ class NeuConNet(nn.Module):
         loss_dict[f'rerender_loss'] = 0.0
         image_dict = {}
         """ ----coarse to fine---- """
-        for i in range(self.cfg.N_LAYER):
+        for i in range(self.cfg.MODEL.N_LAYER):
             interval = 2 ** (self.n_scales - i)
             scale = self.n_scales - i
             # print('\n' + '='*80)
@@ -148,7 +151,7 @@ class NeuConNet(nn.Module):
             if i == 0:
                 # print('-'*10 + 'Generate New coords' + '-'*10)
                 # """ ----generate new coords---- """
-                coords = generate_grid(self.cfg.N_VOX, interval)[0]
+                coords = generate_grid(self.cfg.MODEL.N_VOX, interval)[0]
                 # print('coords:', coords.shape)
                 up_coords = []
                 for b in range(bs):
@@ -179,7 +182,7 @@ class NeuConNet(nn.Module):
             KRcam = inputs['proj_matrices'][:, :, scale].permute(1, 0, 2, 3).contiguous()
             # print('feats:', feats.shape)
             # print('KRcam:', KRcam.shape)
-            volume, count = back_project(up_coords, inputs['vol_origin_partial'], self.cfg.VOXEL_SIZE, feats,
+            volume, count = back_project(up_coords, inputs['vol_origin_partial'], self.cfg.MODEL.VOXEL_SIZE, feats,
                                          KRcam)
             grid_mask = count > 1
 
@@ -190,7 +193,7 @@ class NeuConNet(nn.Module):
             else:
                 feat = volume
 
-            if not self.cfg.FUSION.FUSION_ON:
+            if not self.cfg.MODEL.FUSION.FUSION_ON:
                 tsdf_target, occ_target = self.get_target(up_coords, inputs, scale)
 
             """ ----convert to aligned camera coordinate---- """
@@ -199,7 +202,7 @@ class NeuConNet(nn.Module):
             for b in range(bs):
                 batch_ind = torch.nonzero(up_coords[:, 0] == b).squeeze(1)
                 coords_batch = up_coords[batch_ind][:, 1:].float()
-                coords_batch = coords_batch * self.cfg.VOXEL_SIZE + inputs['vol_origin_partial'][b].float()
+                coords_batch = coords_batch * self.cfg.MODEL.VOXEL_SIZE + inputs['vol_origin_partial'][b].float()
                 coords_batch = torch.cat((coords_batch, torch.ones_like(coords_batch[:, :1])), dim=1)
                 coords_batch = coords_batch @ inputs['world_to_aligned_camera'][b, :3, :].permute(1, 0).contiguous()
                 r_coords[batch_ind, 1:] = coords_batch
@@ -220,13 +223,13 @@ class NeuConNet(nn.Module):
 
             """ ----gru fusion---- """
             # print('-'*10 + 'gru fusion' + '-'*10)
-            if self.cfg.FUSION.FUSION_ON:
+            if self.cfg.MODEL.FUSION.FUSION_ON:
                 up_coords, feat, tsdf_target, occ_target = self.gru_fusion(up_coords, feat, inputs, i)
                 # print('up_coords:', up_coords.shape)
                 # print('feat:', feat.shape)
                 # print('tsdf_target:', tsdf_target.shape)
                 # print('occ_target:', occ_target.shape)
-                if self.cfg.FUSION.FULL:
+                if self.cfg.MODEL.FUSION.FULL:
                     grid_mask = torch.ones_like(feat[:, 0]).bool()
                     # print('grid_mask:', grid_mask.shape)
 
@@ -247,20 +250,20 @@ class NeuConNet(nn.Module):
             if tsdf_target is not None:
                 loss = self.compute_loss(tsdf, occ, tsdf_target, occ_target,
                                          mask=grid_mask,
-                                         pos_weight=self.cfg.POS_WEIGHT)
+                                         pos_weight=self.cfg.MODEL.POS_WEIGHT)
                 
-                if apply_loss and i == self.cfg.N_LAYER - 1:
-                    if self.cfg.RERENDER.LOSS:
-                        rerender_loss, depths, depths_target = diff_renderer(self.cfg, up_coords, inputs['vol_origin_partial'], self.cfg.VOXEL_SIZE, tsdf, 
-                                                                                depths_gt, feats, intrinsics, extrinsics)
+                if apply_loss and i == self.cfg.MODEL.N_LAYER - 1:
+                    if self.cfg.MODEL.RERENDER.LOSS:
+                        rerender_loss, depths, depths_target = self.raycaster(up_coords, inputs['vol_origin_partial'], tsdf, 
+                                                                              depths_gt, feats, intrinsics, extrinsics)
                         loss += rerender_loss
                         loss_dict[f'rerender_loss'] += rerender_loss    
                         image_dict.update({f'depth': depths})
                         image_dict.update({f'depth_target': depths_target})
 
-                    if self.cfg.PROJECTION.LOSS:
-                        projection_loss, depths, depths_target, depths_target_masked = projection_2d_loss(self.cfg, up_coords, inputs['vol_origin_partial'],
-                                                                                                        self.cfg.VOXEL_SIZE, tsdf, depths_gt, feats, KRcam)
+                    if self.cfg.MODEL.PROJECTION.LOSS:
+                        projection_loss, depths, depths_target, depths_target_masked = projection_2d_loss(self.cfg.MODEL, up_coords, inputs['vol_origin_partial'],
+                                                                                                        self.cfg.MODEL.VOXEL_SIZE, tsdf, depths_gt, feats, KRcam)
                         loss += projection_loss
 
                         loss_dict[f'projection_loss'] += projection_loss
@@ -268,12 +271,12 @@ class NeuConNet(nn.Module):
                         image_dict.update({f'projection_depth_target_masked{i}': depths_target_masked})
                         image_dict.update({f'projection_depth_target': depths_target})
 
-                    if self.cfg.FOV_TSDF_LOSS.LOSS:
-                        fov_loss = fov_tsdf_loss(self.cfg, up_coords, inputs['vol_origin_partial'],
-                                                        self.cfg.VOXEL_SIZE, tsdf, tsdf_target, grid_mask, KRcam, feats)
+                    # if self.cfg.MODEL.FOV_TSDF_LOSS.LOSS:
+                    #     fov_loss = fov_tsdf_loss(self.cfg.MODEL, up_coords, inputs['vol_origin_partial'],
+                    #                              self.cfg.MODEL.VOXEL_SIZE, tsdf, tsdf_target, grid_mask, KRcam, feats)
                         
-                        loss += fov_loss
-                        loss_dict[f'fov_tsdf_loss'] += fov_loss
+                    #     loss += fov_loss
+                    #     loss_dict[f'fov_tsdf_loss'] += fov_loss
             else:
                 loss = torch.Tensor(np.array([0]))[0]
             loss_dict.update({f'tsdf_occ_loss_{i}': loss})
@@ -281,7 +284,7 @@ class NeuConNet(nn.Module):
 
             """ ------define the sparsity for the next stage----- """
             # print('-'*10 + 'define the sparsity for the next stage' + '-'*10)
-            occupancy = occ.squeeze(1) > self.cfg.THRESHOLDS[i]
+            occupancy = occ.squeeze(1) > self.cfg.MODEL.THRESHOLDS[i]
             occupancy[grid_mask == False] = False
             # print('occupancy:', occupancy.shape)
 
@@ -296,9 +299,9 @@ class NeuConNet(nn.Module):
             # print('-'*10 + 'avoid out of memory: sample points if num of points is too large' + '-'*10)
             # print('up_coords:', up_coords.shape)
             # print('num:', num)
-            # print('num_preserve:', num - self.cfg.TRAIN_NUM_SAMPLE[i] * bs)
-            if self.training and num > self.cfg.TRAIN_NUM_SAMPLE[i] * bs:
-                choice = np.random.choice(num, num - self.cfg.TRAIN_NUM_SAMPLE[i] * bs,
+            # print('num_preserve:', num - self.cfg.MODEL.TRAIN_NUM_SAMPLE[i] * bs)
+            if self.training and num > self.cfg.MODEL.TRAIN_NUM_SAMPLE[i] * bs:
+                choice = np.random.choice(num, num - self.cfg.MODEL.TRAIN_NUM_SAMPLE[i] * bs,
                                           replace=False)
                 ind = torch.nonzero(occupancy)
                 occupancy[ind[choice]] = False
@@ -325,11 +328,11 @@ class NeuConNet(nn.Module):
             pre_feat = torch.cat([pre_feat, pre_tsdf, pre_occ], dim=1)
             # print('pre_feat:', pre_feat.shape)
 
-            if i == self.cfg.N_LAYER - 1:
+            if i == self.cfg.MODEL.N_LAYER - 1:
                 # print('-'*20)
                 outputs['coords'] = pre_coords
                 outputs['tsdf'] = pre_tsdf
-                #outputs['tsdf'] = tsdf_target[occ_target.squeeze(1) > self.cfg.THRESHOLDS[i]]
+                #outputs['tsdf'] = tsdf_target[occ_target.squeeze(1) > self.cfg.MODEL.THRESHOLDS[i]]
                 # print('pre_tsdf:', pre_tsdf.shape)
                 # print('tsdf_target:', tsdf_target.shape)
                 # print('tsdf:', tsdf.shape)
