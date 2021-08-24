@@ -18,6 +18,7 @@ from datasets.sampler import DistributedSampler
 from ops.comm import *
 
 import datetime
+from tqdm import tqdm
 
 
 def args():
@@ -69,6 +70,7 @@ if cfg.DISTRIBUTED:
     torch.cuda.set_device(args.local_rank)
     torch.distributed.init_process_group(
         backend="nccl", init_method="env://"
+        # backend="nccl", init_method=args.dist_url, rank=args.local_rank, world_size=args.world_size
     )
     synchronize()
 cfg.LOCAL_RANK = args.local_rank
@@ -184,7 +186,7 @@ def train():
         logger.info("loading model {}".format(cfg.LOADCKPT))
         map_location = {'cuda:%d' % 0: 'cuda:%d' % cfg.LOCAL_RANK}
         state_dict = torch.load(cfg.LOADCKPT, map_location=map_location)
-        model.load_state_dict(state_dict['model'])
+        model.load_state_dict(state_dict['model'], strict=False)
         optimizer.param_groups[0]['initial_lr'] = state_dict['optimizer']['param_groups'][0]['lr']
         optimizer.param_groups[0]['lr'] = state_dict['optimizer']['param_groups'][0]['lr']
         start_epoch = state_dict['epoch'] + 1
@@ -205,8 +207,9 @@ def train():
         for batch_idx, sample in enumerate(TrainImgLoader):
             global_step = len(TrainImgLoader) * epoch_idx + batch_idx
             do_summary = global_step % cfg.SUMMARY_FREQ == 0
+            apply_loss = (cfg.MODE == 'train' and epoch_idx >= cfg.TRAIN.APPLY_LOSS) or (cfg.MODE == 'test' and do_summary)
             start_time = time.time()
-            loss, scalar_outputs, image_outputs = train_sample(sample)
+            loss, scalar_outputs, image_outputs = train_sample(sample, apply_loss=apply_loss)
             if is_main_process():
                 logger.info(
                     'Epoch {}/{}, Iter {}/{}, train loss = {:.3f}, time = {:.3f}'.format(epoch_idx, cfg.TRAIN.EPOCHS,
@@ -255,6 +258,7 @@ def test(from_latest=False):
             save_mesh_scene = SaveScene(cfg)
             batch_len = len(TestImgLoader)
             for batch_idx, sample in enumerate(TestImgLoader):
+                torch.cuda.empty_cache()
                 for n in sample['fragment']:
                     logger.info(n)
                 # save mesh if SAVE_SCENE_MESH and is the last fragment
@@ -264,13 +268,15 @@ def test(from_latest=False):
                 n = sample['fragment'][-1]
 
                 start_time = time.time()
-                loss, scalar_outputs, outputs = test_sample(sample, save_scene)
+                loss, scalar_outputs, outputs, image_outputs = test_sample(sample, save_scene)
                 logger.info('Epoch {}, Iter {}/{}, test loss = {:.3f}, time = {:3f}'.format(epoch_idx, batch_idx,
                                                                                             len(TestImgLoader),
                                                                                             loss,
                                                                                             time.time() - start_time))
+                save_images(tb_writer, 'test', image_outputs, batch_idx)
                 avg_test_scalars.update(scalar_outputs)
                 del scalar_outputs
+                del image_outputs
 
                 if batch_idx % 100 == 0:
                     logger.info("Iter {}/{}, test results = {}".format(batch_idx, len(TestImgLoader),
@@ -290,11 +296,11 @@ def test(from_latest=False):
         # time.sleep(10)
 
 
-def train_sample(sample):
+def train_sample(sample, apply_loss=False):
     model.train()
     optimizer.zero_grad()
 
-    outputs, loss_dict, image_dict = model(sample)
+    outputs, loss_dict, image_dict = model(sample, apply_loss=apply_loss)
     loss = loss_dict['total_loss']
     loss.backward()
     torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
@@ -306,10 +312,10 @@ def train_sample(sample):
 def test_sample(sample, save_scene=False):
     model.eval()
 
-    outputs, loss_dict, _ = model(sample, save_scene)
+    outputs, loss_dict, image_dict = model(sample, save_scene, apply_loss=True)
     loss = loss_dict['total_loss']
 
-    return tensor2float(loss), tensor2float(loss_dict), outputs
+    return tensor2float(loss), tensor2float(loss_dict), outputs, image_dict
 
 
 if __name__ == '__main__':

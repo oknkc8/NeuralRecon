@@ -94,6 +94,7 @@ def diff_renderer(cfg, coords, origin, voxel_size, sdf, depths_target, feats, in
         batch_index = torch.tensor([0 for _ in range(num_points)]).cuda()
         batch_index = batch_index.unsqueeze(1)
         coords_batch = torch.cat([coords_batch, batch_index], dim=1).type(torch.LongTensor).cuda()
+        depths_target_batch = depths_target[batch]
 
         raycaster_rgbd = RaycastRGBD(1, dim, w, h, depth_min=0.001/voxel_size, depth_max=raycast_depth_max/voxel_size,
                                         thresh_sample_dist=thresh_sample_dist, ray_increment=ray_increment,
@@ -113,25 +114,23 @@ def diff_renderer(cfg, coords, origin, voxel_size, sdf, depths_target, feats, in
             intrinsics_batch[:, 2] = intrinsics_matrix_batch[view_idx, 0, 2]
             intrinsics_batch[:, 3] = intrinsics_matrix_batch[view_idx, 1, 2]
             
-            raycast_color, raycast_depths, raycast_normal = raycaster_rgbd(coords_batch, sdf_batch, color, normals, 
+            raycast_color, raycast_depth, raycast_normal = raycaster_rgbd(coords_batch, sdf_batch, color, normals, 
                                                                            view_matrix_batch[view_idx].unsqueeze(0).contiguous(), intrinsics_batch)
 
-            depths_batch.append(torch.clone(raycast_depths))
-        
-        depths_batch = torch.stack(depths_batch, dim=0).squeeze(1)
+            depth_target = depths_target_batch[view_idx].unsqueeze(0)
 
-        depths_target_batch = depths_target[batch]
+            valid = (raycast_depth != -float('inf')) & (depth_target != 0)
 
-        valid = (depths_batch != -float('inf')) & (depths_target_batch != 0)
+            if valid.sum() != 0:
+                loss += (torch.mean(torch.abs(normalize(raycast_depth[valid]) - normalize(depth_target[valid]))) * cfg.RERENDER.WEIGHT)
 
-        if valid.sum() != 0:
-            loss += (torch.mean(torch.abs(normalize(depths_batch[valid]) - normalize(depths_target_batch[valid]))) * cfg.RERENDER.WEIGHT)
+            depths_batch.append(torch.clone(raycast_depth.squeeze(0)))
 
+        depths_batch = torch.stack(depths_batch, dim=0)
         depths_batch[depths_batch == -float('inf')] = 0
 
         depths.append(depths_batch)
-    
-    
+        
     depths = torch.stack(depths, dim=0)
 
     return loss, depths, depths_target

@@ -114,7 +114,7 @@ class NeuConNet(nn.Module):
 
         return up_feat, up_coords
 
-    def forward(self, features, inputs, outputs):
+    def forward(self, features, inputs, outputs, apply_loss=False):
         '''
 
         :param features: list: features for each image: eg. list[0] : pyramid features for image0 : [(B, C0, H, W), (B, C1, H/2, W/2), (B, C2, H/2, W/2)]
@@ -249,7 +249,7 @@ class NeuConNet(nn.Module):
                                          mask=grid_mask,
                                          pos_weight=self.cfg.POS_WEIGHT)
                 
-                if i == self.cfg.N_LAYER - 1:
+                if apply_loss and i == self.cfg.N_LAYER - 1:
                     if self.cfg.RERENDER.LOSS:
                         rerender_loss, depths, depths_target = diff_renderer(self.cfg, up_coords, inputs['vol_origin_partial'], self.cfg.VOXEL_SIZE, tsdf, 
                                                                                 depths_gt, feats, intrinsics, extrinsics)

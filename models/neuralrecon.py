@@ -31,7 +31,7 @@ class NeuralRecon(nn.Module):
         """ Normalizes the RGB images to the input range"""
         return (x - self.pixel_mean.type_as(x)) / self.pixel_std.type_as(x)
 
-    def forward(self, inputs, save_mesh=False):
+    def forward(self, inputs, save_mesh=False, apply_loss=False):
         '''
 
         :param inputs: dict: {
@@ -81,7 +81,7 @@ class NeuralRecon(nn.Module):
 
         # coarse-to-fine decoder: SparseConv and GRU Fusion.
         # in: image feature; out: sparse coords and tsdf
-        outputs, loss_dict, image_dict = self.neucon_net(features, inputs, outputs)
+        outputs, loss_dict, image_dict = self.neucon_net(features, inputs, outputs, apply_loss=apply_loss)
 
         image_dict.update({'input_images' : torch.cat(imgs, dim=0).permute(1,0,2,3)})
 

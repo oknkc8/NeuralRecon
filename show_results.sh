@@ -1,2 +1,2 @@
 python tools/visualize_metrics.py \
---model ./results/scene_scannet_test_model_fusion_eval_38 \
+--model ./results/legacy/0820_scene_scannet_test_model_fusion_eval_47 \
