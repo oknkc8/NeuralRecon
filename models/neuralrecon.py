@@ -6,6 +6,7 @@ from .neucon_network import NeuConNet
 from .gru_fusion import GRUFusion
 from utils import tocuda
 
+import pdb
 
 class NeuralRecon(nn.Module):
     '''
@@ -77,6 +78,13 @@ class NeuralRecon(nn.Module):
         # in: images; out: feature maps
         # img : (batch size, C, H, W)
         # len(imgs) : number of views
+        scene = inputs['scene']
+        frag = inputs['fragment']
+        # print(f'scene: {scene}, fragment: {frag}')
+
+        # if scene[0] == 'scene0177_02' and frag[0] == 'scene0177_02_20':
+        #     pdb.set_trace()
+        
         features = [self.backbone2d(self.normalizer(img)) for img in imgs]
 
         # coarse-to-fine decoder: SparseConv and GRU Fusion.
@@ -96,8 +104,13 @@ class NeuralRecon(nn.Module):
 
         weighted_loss = 0
 
-        for i, (k, v) in enumerate(loss_dict.items()):
-            weighted_loss += v * self.cfg.LW[i]
+        i = 0
+        for (k, v) in loss_dict.items():
+            if not ('tsdf_occ' in k):
+                weighted_loss += v
+            else:
+                weighted_loss += v * self.cfg.LW[i]
+                i += 1
 
         loss_dict.update({'total_loss': weighted_loss})
         return outputs, loss_dict, image_dict

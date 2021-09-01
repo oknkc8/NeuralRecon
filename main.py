@@ -205,6 +205,9 @@ def train():
         TrainImgLoader.dataset.tsdf_cashe = {}
         # training
         for batch_idx, sample in enumerate(TrainImgLoader):
+            # if batch_idx < 400:
+            #     continue
+
             global_step = len(TrainImgLoader) * epoch_idx + batch_idx
             do_summary = global_step % cfg.SUMMARY_FREQ == 0
             apply_loss = (cfg.MODE == 'train' and epoch_idx >= cfg.TRAIN.APPLY_LOSS) or (cfg.MODE == 'test' and do_summary)
@@ -212,10 +215,11 @@ def train():
             loss, scalar_outputs, image_outputs = train_sample(sample, apply_loss=apply_loss)
             if is_main_process():
                 logger.info(
-                    'Epoch {}/{}, Iter {}/{}, train loss = {:.3f}, time = {:.3f}'.format(epoch_idx, cfg.TRAIN.EPOCHS,
+                    'Epoch {}/{}, Iter {}/{}, train loss = {:.3f}, time = {:.3f}, lr = {:.5f}'.format(epoch_idx, cfg.TRAIN.EPOCHS,
                                                                                          batch_idx,
                                                                                          len(TrainImgLoader), loss,
-                                                                                         time.time() - start_time))
+                                                                                         time.time() - start_time,
+                                                                                         optimizer.param_groups[0]['lr']))
 
             if is_main_process():
                 save_scalars(tb_writer, 'train', scalar_outputs, global_step)
@@ -302,6 +306,10 @@ def train_sample(sample, apply_loss=False):
 
     outputs, loss_dict, image_dict = model(sample, apply_loss=apply_loss)
     loss = loss_dict['total_loss']
+    
+    # if loss == 0:
+    #     return tensor2float(loss), tensor2float(loss_dict), image_dict
+
     loss.backward()
     torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
     optimizer.step()

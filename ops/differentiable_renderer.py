@@ -32,7 +32,7 @@ class DiffRenderer(nn.Module):
 
     def forward(self, coords, origin, sdf, depths_target, feats, intrinsics_matrix, view_matrix):
 
-        loss = 0
+        loss = torch.tensor(0.0).cuda()
         depths = []
         for batch in range(self.bs):
             coords_batch = coords[:, 1:]
@@ -72,6 +72,9 @@ class DiffRenderer(nn.Module):
 
                 if valid.sum() != 0:
                     loss += (torch.mean(torch.abs(self.normalize(raycast_depth[valid]) - self.normalize(depth_target[valid]))) * self.cfg.MODEL.RERENDER.WEIGHT) / self.n_views
+                
+                if torch.isnan(loss):
+                    pdb.set_trace()
 
                 depths_batch.append(torch.clone(raycast_depth.squeeze(0)))
 
@@ -131,6 +134,9 @@ class DiffRenderer(nn.Module):
 
     def normalize(self, x):
         x = x - x.min()
+        if x.max() == 0:
+            return x
+
         x = x / x.max()
 
         return x

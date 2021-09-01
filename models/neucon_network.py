@@ -15,6 +15,7 @@ from ops.projection_tsdf_loss import fov_tsdf_loss
 #from ops.differentiable_renderer import diff_renderer
 from ops.differentiable_renderer import DiffRenderer
 
+import pdb
 
 class NeuConNet(nn.Module):
     '''
@@ -133,13 +134,15 @@ class NeuConNet(nn.Module):
             'tsdf_occ_loss_X':         (Tensor), multi level loss
         }
         '''
+        scene = inputs['scene']
+        frag = inputs['fragment']
+        # if scene[0] == 'scene0177_02' and frag[0] == 'scene0177_02_20':
+        #     pdb.set_trace()
+
         bs = features[0][0].shape[0]
         pre_feat = None
         pre_coords = None
         loss_dict = {}
-        loss_dict[f'projection_loss'] = 0.0
-        loss_dict[f'fov_tsdf_loss'] = 0.0
-        loss_dict[f'rerender_loss'] = 0.0
         image_dict = {}
         """ ----coarse to fine---- """
         for i in range(self.cfg.MODEL.N_LAYER):
@@ -256,17 +259,17 @@ class NeuConNet(nn.Module):
                     if self.cfg.MODEL.RERENDER.LOSS:
                         rerender_loss, depths, depths_target = self.raycaster(up_coords, inputs['vol_origin_partial'], tsdf, 
                                                                               depths_gt, feats, intrinsics, extrinsics)
-                        loss_dict[f'rerender_loss'] += rerender_loss    
+                        loss_dict.update({f'rerender_loss': rerender_loss})
                         image_dict.update({f'depth': depths})
                         image_dict.update({f'depth_target': depths_target})
 
-                    if self.cfg.MODEL.PROJECTION.LOSS:
-                        projection_loss, depths, depths_target, depths_target_masked = projection_2d_loss(self.cfg.MODEL, up_coords, inputs['vol_origin_partial'],
-                                                                                                        self.cfg.MODEL.VOXEL_SIZE, tsdf, depths_gt, feats, KRcam)
-                        loss_dict[f'projection_loss'] += projection_loss
-                        image_dict.update({f'projection_depth_{i}': depths})
-                        image_dict.update({f'projection_depth_target_masked{i}': depths_target_masked})
-                        image_dict.update({f'projection_depth_target': depths_target})
+                    # if self.cfg.MODEL.PROJECTION.LOSS:
+                    #     projection_loss, depths, depths_target, depths_target_masked = projection_2d_loss(self.cfg.MODEL, up_coords, inputs['vol_origin_partial'],
+                    #                                                                                     self.cfg.MODEL.VOXEL_SIZE, tsdf, depths_gt, feats, KRcam)
+                    #     loss_dict[f'projection_loss'] += projection_loss
+                    #     image_dict.update({f'projection_depth_{i}': depths})
+                    #     image_dict.update({f'projection_depth_target_masked{i}': depths_target_masked})
+                    #     image_dict.update({f'projection_depth_target': depths_target})
 
                     # if self.cfg.MODEL.FOV_TSDF_LOSS.LOSS:
                     #     fov_loss = fov_tsdf_loss(self.cfg.MODEL, up_coords, inputs['vol_origin_partial'],
@@ -289,7 +292,8 @@ class NeuConNet(nn.Module):
             # print('num:', num)
 
             if num == 0:
-                loss_dict.update({f'tsdf_occ_loss_{i}': torch.Tensor(np.array([0])).cuda()[0]})
+                # loss_dict.update({f'tsdf_occ_loss_{i}': torch.tensor(0.0, requires_grad=True)})
+                pdb.set_trace()
                 logger.warning('no valid points: scale {}'.format(i))
                 return outputs, loss_dict, image_dict
 
