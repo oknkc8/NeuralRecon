@@ -4,6 +4,7 @@ SAVE_SCENE_MESH: True
 SAVE_SCENE_MESH_ITER: False
 LOGDIR: './checkpoints/test_model'
 SAVE_FREQ: 1
+SUMMARY_FREQ: 50
 MODE: 'test'
 
 TRAIN:
@@ -39,23 +40,12 @@ MODEL:
     FULL: True
 
   RERENDER:
-    LOSS: True
+    LOSS: False
     WEIGHT: 5
     MAX_NUM_POINTS: 1000000
     RAYCAST_DEPTH_MAX: 15
 
-  PROJECTION:
-    LOSS: False
-    LOSS_WEIGHT: 10
-    THRESHOLD: 0.3
-    UPSCALE: 5
-    
-  FOV_TSDF_LOSS:
-    LOSS: False
-    WEIGHT: 10
-    DEPTH_INDEX_MAX: 192
-
-  LW: [1.0, 1.0, 1.0, 1.0, 0.8, 0.64]
+  LW: [1.0, 0.8, 0.64]
 
   THRESHOLDS: [0, 0, 0]
   POS_WEIGHT: 1.5

@@ -45,6 +45,7 @@ class ToTensor(object):
         data['imgs'] = torch.Tensor(np.stack(data['imgs']).transpose([0, 3, 1, 2]))
         data['intrinsics'] = torch.Tensor(data['intrinsics'])
         data['extrinsics'] = torch.Tensor(data['extrinsics'])
+        data['intrinsics_depth'] = torch.Tensor(data['intrinsics_depth'])
         if 'depth' in data.keys():
             data['depth'] = torch.Tensor(np.stack(data['depth']))
         if 'tsdf_list_full' in data.keys():

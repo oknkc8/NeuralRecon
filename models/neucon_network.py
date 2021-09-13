@@ -118,7 +118,7 @@ class NeuConNet(nn.Module):
 
         return up_feat, up_coords
 
-    def forward(self, features, inputs, outputs, apply_loss=False):
+    def forward(self, features, inputs, outputs, apply_loss=False, apply_gru=False):
         '''
 
         :param features: list: features for each image: eg. list[0] : pyramid features for image0 : [(B, C0, H, W), (B, C1, H/2, W/2), (B, C2, H/2, W/2)]
@@ -196,7 +196,7 @@ class NeuConNet(nn.Module):
             else:
                 feat = volume
 
-            if not self.cfg.MODEL.FUSION.FUSION_ON:
+            if not self.cfg.MODEL.FUSION.FUSION_ON or (self.cfg.MODEL.FUSION.FUSION_ON and not apply_gru):
                 tsdf_target, occ_target = self.get_target(up_coords, inputs, scale)
 
             """ ----convert to aligned camera coordinate---- """
@@ -226,7 +226,7 @@ class NeuConNet(nn.Module):
 
             """ ----gru fusion---- """
             # print('-'*10 + 'gru fusion' + '-'*10)
-            if self.cfg.MODEL.FUSION.FUSION_ON:
+            if self.cfg.MODEL.FUSION.FUSION_ON and apply_gru:
                 up_coords, feat, tsdf_target, occ_target = self.gru_fusion(up_coords, feat, inputs, i)
                 # print('up_coords:', up_coords.shape)
                 # print('feat:', feat.shape)
@@ -246,6 +246,7 @@ class NeuConNet(nn.Module):
             depth_KRcam = inputs['depth_proj_matrices'][:, :, scale].permute(1, 0, 2, 3).contiguous()
             intrinsics = inputs['intrinsics']
             extrinsics = inputs['extrinsics']
+            intrinsics_depth = inputs['intrinsics_depth']
 
             # print('tsdf_target:', tsdf_target.shape)                
             # print('tsdf_target:', tsdf_target.unique())
@@ -257,8 +258,10 @@ class NeuConNet(nn.Module):
                 
                 if apply_loss and i == self.cfg.MODEL.N_LAYER - 1:
                     if self.cfg.MODEL.RERENDER.LOSS:
-                        rerender_loss, depths, depths_target = self.raycaster(up_coords, inputs['vol_origin_partial'], tsdf, 
-                                                                              depths_gt, feats, intrinsics, extrinsics)
+                        rerender_loss, depths, depths_target = self.raycaster(up_coords, inputs['vol_origin_partial'], tsdf, depths_gt,
+                                                                              intrinsics_depth, extrinsics)
+                        # rerender_loss, depths, depths_target = self.raycaster(up_coords, inputs['vol_origin_partial'], tsdf, tsdf_target,
+                        #                                                       feats, intrinsics, extrinsics)
                         loss_dict.update({f'rerender_loss': rerender_loss})
                         image_dict.update({f'depth': depths})
                         image_dict.update({f'depth_target': depths_target})
@@ -293,7 +296,6 @@ class NeuConNet(nn.Module):
 
             if num == 0:
                 # loss_dict.update({f'tsdf_occ_loss_{i}': torch.tensor(0.0, requires_grad=True)})
-                pdb.set_trace()
                 logger.warning('no valid points: scale {}'.format(i))
                 return outputs, loss_dict, image_dict
 

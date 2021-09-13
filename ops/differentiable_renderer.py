@@ -29,11 +29,18 @@ class DiffRenderer(nn.Module):
                                           depth_min=0.001/self.voxel_size, depth_max=self.raycast_depth_max/self.voxel_size,
                                           thresh_sample_dist=self.thresh_sample_dist, ray_increment=self.ray_increment,
                                           max_num_locs_per_sample=self.max_num_locs_per_sample, voxel_size=self.voxel_size)
+        
+        self.raycaster_rgbd_target = RaycastRGBD(1, self.dim, self.w, self.h, 
+                                                 depth_min=0.001/self.voxel_size, depth_max=self.raycast_depth_max/self.voxel_size,
+                                                 thresh_sample_dist=self.thresh_sample_dist, ray_increment=self.ray_increment,
+                                                 max_num_locs_per_sample=self.max_num_locs_per_sample, voxel_size=self.voxel_size)
 
-    def forward(self, coords, origin, sdf, depths_target, feats, intrinsics_matrix, view_matrix):
+    # def forward(self, coords, origin, sdf, sdf_target, feats, intrinsics_matrix, view_matrix):
+    def forward(self, coords, origin, sdf, depths_target, intrinsics_matrix, view_matrix):
 
         loss = torch.tensor(0.0).cuda()
         depths = []
+        #depths_target = []
         for batch in range(self.bs):
             coords_batch = coords[:, 1:]
             intrinsics_matrix_batch = intrinsics_matrix[batch]
@@ -41,6 +48,7 @@ class DiffRenderer(nn.Module):
             origin_batch = origin[batch].cuda()
             # origin_batch = torch.cat([origin_batch[2:3], origin_batch[1:2], origin_batch[0:1]], dim=0)
             sdf_batch = sdf
+            # sdf_target_batch = sdf_target
             
             num_points = coords_batch.shape[0]
             batch_index = torch.tensor([0 for _ in range(num_points)]).cuda()
@@ -51,10 +59,12 @@ class DiffRenderer(nn.Module):
             color = torch.zeros(coords_batch.shape[0], 3).cuda()    
 
             depths_batch = []
+            # depths_target_batch = []
             coords_batch = torch.cat([coords_batch[:, 2:3], coords_batch[:, 1:2], coords_batch[:, 0:1], coords_batch[:, 3:4]], dim=1)
 
             for view_idx in range(self.n_views):
                 normals = self.compute_normals_sparse(coords_batch, sdf_batch, self.dim, transform=view_matrix_batch[view_idx].unsqueeze(0))
+                # normals_target = self.compute_normals_sparse(coords_batch, sdf_target_batch, self.dim, transform=view_matrix_batch[view_idx].unsqueeze(0))
 
                 intrinsics_batch = torch.FloatTensor(1, 4).cuda()
                 intrinsics_batch[:, 0] = intrinsics_matrix_batch[view_idx, 0, 0]
@@ -66,24 +76,36 @@ class DiffRenderer(nn.Module):
                                                                                    view_matrix_batch[view_idx].unsqueeze(0).contiguous(), 
                                                                                    intrinsics_batch, origin_batch)
 
+                # raycast_color_target, raycast_depth_target, raycast_normal_target = self.raycaster_rgbd_target(coords_batch, sdf_target_batch, color, normals_target, 
+                #                                                                                                 view_matrix_batch[view_idx].unsqueeze(0).contiguous(), 
+                #                                                                                                 intrinsics_batch, origin_batch)
+
+                # pdb.set_trace()
                 depth_target = depths_target_batch[view_idx].unsqueeze(0)
 
                 valid = (raycast_depth != -float('inf')) & (depth_target != 0)
+                # valid = (raycast_depth != -float('inf')) & (raycast_depth_target != -float('inf'))
 
                 if valid.sum() != 0:
                     loss += (torch.mean(torch.abs(self.normalize(raycast_depth[valid]) - self.normalize(depth_target[valid]))) * self.cfg.MODEL.RERENDER.WEIGHT) / self.n_views
+                    # loss += (torch.mean(torch.abs(self.normalize(raycast_depth[valid]) - self.normalize(raycast_depth_target[valid]))) * self.cfg.MODEL.RERENDER.WEIGHT) / self.n_views
                 
                 if torch.isnan(loss):
                     pdb.set_trace()
 
                 depths_batch.append(torch.clone(raycast_depth.squeeze(0)))
+                # depths_target_batch.append(torch.clone(raycast_depth_target.squeeze(0)))
 
             depths_batch = torch.stack(depths_batch, dim=0)
             depths_batch[depths_batch == -float('inf')] = 0
+            # depths_target_batch = torch.stack(depths_target_batch, dim=0)
+            # depths_target_batch[depths_target_batch == -float('inf')] = 0
 
             depths.append(depths_batch)
+            # depths_target.append(depths_target_batch)
             
         depths = torch.stack(depths, dim=0)
+        # depths_target = torch.stack(depths_target, dim=0)
 
         return loss, depths, depths_target
 
@@ -118,6 +140,9 @@ class DiffRenderer(nn.Module):
         normals = self.compute_normals_dense(sdf)
         normals = torch.nn.functional.pad(normals, (1,1,1,1,1,1),value=-float('inf'))
         normals = normals[sdf_locs[:,3],:,sdf_locs[:,0],sdf_locs[:,1],sdf_locs[:,2]].contiguous()
+        
+        # pdb.set_trace()
+
         mask = normals[:,0] != -float('inf')
         normals[normals == -float('inf')] = 0
         if transform is not None:

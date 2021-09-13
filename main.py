@@ -211,8 +211,9 @@ def train():
             global_step = len(TrainImgLoader) * epoch_idx + batch_idx
             do_summary = global_step % cfg.SUMMARY_FREQ == 0
             apply_loss = (cfg.MODE == 'train' and epoch_idx >= cfg.TRAIN.APPLY_LOSS) or (cfg.MODE == 'test' and do_summary)
+            apply_gru = epoch_idx >= cfg.TRAIN.APPLY_GRU
             start_time = time.time()
-            loss, scalar_outputs, image_outputs = train_sample(sample, apply_loss=apply_loss)
+            loss, scalar_outputs, image_outputs = train_sample(sample, apply_loss=apply_loss, apply_gru=apply_gru)
             if is_main_process():
                 logger.info(
                     'Epoch {}/{}, Iter {}/{}, train loss = {:.3f}, time = {:.3f}, lr = {:.5f}'.format(epoch_idx, cfg.TRAIN.EPOCHS,
@@ -247,7 +248,7 @@ def test(from_latest=False):
 
     if from_latest:
         saved_models = saved_models[-1:]
-    for ckpt in saved_models:
+    for i, ckpt in enumerate(saved_models):
         if ckpt not in ckpt_list:
             # use the latest checkpoint file
             loadckpt = os.path.join(cfg.LOGDIR, ckpt)
@@ -262,6 +263,9 @@ def test(from_latest=False):
             save_mesh_scene = SaveScene(cfg)
             batch_len = len(TestImgLoader)
             for batch_idx, sample in enumerate(TestImgLoader):
+                # if batch_idx <= 100:
+                #     continue
+
                 torch.cuda.empty_cache()
                 for n in sample['fragment']:
                     logger.info(n)
@@ -277,8 +281,12 @@ def test(from_latest=False):
                                                                                             len(TestImgLoader),
                                                                                             loss,
                                                                                             time.time() - start_time))
-                save_images(tb_writer, 'test', image_outputs, batch_idx)
                 avg_test_scalars.update(scalar_outputs)
+
+                global_step = i * batch_len + batch_idx
+                if batch_idx % cfg.SUMMARY_FREQ == 0:
+                    save_images(tb_writer, 'test', image_outputs, global_step)
+
                 del scalar_outputs
                 del image_outputs
 
@@ -300,11 +308,11 @@ def test(from_latest=False):
         # time.sleep(10)
 
 
-def train_sample(sample, apply_loss=False):
+def train_sample(sample, apply_loss=False, apply_gru=False):
     model.train()
     optimizer.zero_grad()
 
-    outputs, loss_dict, image_dict = model(sample, apply_loss=apply_loss)
+    outputs, loss_dict, image_dict = model(sample, apply_loss=apply_loss, apply_gru=apply_gru)
     loss = loss_dict['total_loss']
     
     # if loss == 0:
@@ -320,7 +328,7 @@ def train_sample(sample, apply_loss=False):
 def test_sample(sample, save_scene=False):
     model.eval()
 
-    outputs, loss_dict, image_dict = model(sample, save_scene, apply_loss=True)
+    outputs, loss_dict, image_dict = model(sample, save_scene, apply_loss=True, apply_gru=True)
     loss = loss_dict['total_loss']
 
     return tensor2float(loss), tensor2float(loss_dict), outputs, image_dict

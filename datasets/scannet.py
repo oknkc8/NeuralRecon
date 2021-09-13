@@ -38,8 +38,11 @@ class ScanNetDataset(Dataset):
     def read_cam_file(self, filepath, vid):
         intrinsics = np.loadtxt(os.path.join(filepath, 'intrinsic', 'intrinsic_color.txt'), delimiter=' ')[:3, :3]
         intrinsics = intrinsics.astype(np.float32)
+        intrinsics_depth = np.loadtxt(os.path.join(filepath, 'intrinsic', 'intrinsic_depth.txt'), delimiter=' ')[:3, :3]
+        intrinsics_depth = intrinsics_depth.astype(np.float32)
         extrinsics = np.loadtxt(os.path.join(filepath, 'pose', '{}.txt'.format(str(vid))))
-        return intrinsics, extrinsics
+        # return intrinsics, extrinsics
+        return intrinsics, extrinsics, intrinsics_depth
 
     def read_img(self, filepath):
         img = Image.open(filepath)
@@ -73,6 +76,7 @@ class ScanNetDataset(Dataset):
         depth = []
         extrinsics_list = []
         intrinsics_list = []
+        intrinsics_depth_list = []
 
         tsdf_list = self.read_scene_volumes(os.path.join(self.datapath, self.tsdf_file), meta['scene'])
 
@@ -88,20 +92,25 @@ class ScanNetDataset(Dataset):
             )
 
             # load intrinsics and extrinsics
-            intrinsics, extrinsics = self.read_cam_file(os.path.join(self.datapath, self.source_path, meta['scene']),
-                                                        vid)
+            # intrinsics, extrinsics = self.read_cam_file(os.path.join(self.datapath, self.source_path, meta['scene']),
+            #                                             vid)
+            intrinsics, extrinsics, intrinsics_depth = self.read_cam_file(os.path.join(self.datapath, self.source_path, meta['scene']),
+                                                                          vid)
 
             intrinsics_list.append(intrinsics)
             extrinsics_list.append(extrinsics)
+            intrinsics_depth_list.append(intrinsics_depth)
 
         intrinsics = np.stack(intrinsics_list)
         extrinsics = np.stack(extrinsics_list)
+        intrinsics_depth = np.stack(intrinsics_depth_list)
 
         items = {
             'imgs': imgs,
             'depth': depth,
             'intrinsics': intrinsics,
             'extrinsics': extrinsics,
+            'intrinsics_depth' : intrinsics_depth,
             'tsdf_list_full': tsdf_list,
             'vol_origin': meta['vol_origin'],
             'scene': meta['scene'],
