@@ -91,12 +91,16 @@ def save_images(logger, mode, images_dict, global_step):
     images_dict = tensor2numpy(images_dict)
 
     def preprocess(name, img):
-        if not (len(img.shape) == 3 or len(img.shape) == 4):
+        if not (len(img.shape) == 3 or len(img.shape) == 4 or len(img.shape) == 5):
             raise NotImplementedError("invalid img shape {}:{} in save_images".format(name, img.shape))
         if len(img.shape) == 3:
             img = img[:, np.newaxis, :, :]
-        img = torch.from_numpy(img)
-        img = img.permute(1,0,2,3)
+        if len(img.shape) == 4:
+            img = torch.from_numpy(img)
+            img = img.permute(1,0,2,3)
+        else:
+            img = torch.from_numpy(img)[0]
+            img = img.permute(0,3,1,2)
         return vutils.make_grid(img, padding=0, nrow=1, normalize=True, scale_each=True)
 
     for key, value in images_dict.items():
