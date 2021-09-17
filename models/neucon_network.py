@@ -264,10 +264,10 @@ class NeuConNet(nn.Module):
                         #                                                       feats, intrinsics, extrinsics)
                         loss_dict.update({f'rerender_loss': rerender_loss})
                         loss_dict.update({f'normal_loss': normal_loss})
-                        image_dict.update({f'depth': depths})
-                        image_dict.update({f'depth_target': depths_target})
-                        image_dict.update({f'normal': normals})
-                        image_dict.update({f'normal_target': normals_target})
+                        image_dict.update({f'depth': depths[-1].unsqueeze(0)})
+                        image_dict.update({f'depth_target': depths_target[0].unsqueeze(0)})
+                        image_dict.update({f'normal': normals[-1].unsqueeze(0)})
+                        image_dict.update({f'normal_target': normals_target[-1].unsqueeze(0)})
 
                     # if self.cfg.MODEL.PROJECTION.LOSS:
                     #     projection_loss, depths, depths_target, depths_target_masked = projection_2d_loss(self.cfg.MODEL, up_coords, inputs['vol_origin_partial'],

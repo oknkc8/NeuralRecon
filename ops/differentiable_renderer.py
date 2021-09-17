@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import kornia
 
 from ops.raycast_rgbd.raycast_rgbd import RaycastRGBD
 import pdb
@@ -87,6 +88,9 @@ class DiffRenderer(nn.Module):
 
                 # pdb.set_trace()
                 depth_target = depths_target_batch[view_idx].unsqueeze(0)
+
+                # tmp_normal = kornia.geometry.depth_to_normals(depth_target.unsqueeze(0), intrinsics_matrix_batch[view_idx].unsqueeze(0), normalize_points=False)
+                # tmp_normal = tmp_normal.permute(0,2,3,1)
 
                 valid = (raycast_depth != -float('inf')) & (depth_target != 0)
                 # valid = (raycast_depth != -float('inf')) & (raycast_depth_target != -float('inf'))
