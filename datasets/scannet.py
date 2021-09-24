@@ -53,7 +53,7 @@ class ScanNetDataset(Dataset):
         depth_im = cv2.imread(filepath, -1).astype(
             np.float32)
         depth_im /= 1000.  # depth is saved in 16-bit PNG in millimeters
-        depth_im[depth_im > 3.0] = 0
+        # depth_im[depth_im > 3.0] = 0
         return depth_im
 
     def read_scene_volumes(self, data_path, scene):

@@ -8,6 +8,8 @@ from loguru import logger
 from tools.render import Visualizer
 import cv2
 
+import pdb
+
 
 # print arguments
 def print_args(args):
@@ -44,7 +46,7 @@ def make_recursive_func(func):
 
 @make_recursive_func
 def tensor2float(vars):
-    if isinstance(vars, float) or vars == 0:
+    if isinstance(vars, float):
         return vars
     elif isinstance(vars, torch.Tensor):
         if len(vars.shape) == 0:
@@ -129,6 +131,7 @@ class DictAverageMeter(object):
         else:
             for k, v in new_input.items():
                 if not isinstance(v, float):
+                    pdb.set_trace()
                     raise NotImplementedError("invalid data {}: {}".format(k, type(v)))
                 self.data[k] += v
 

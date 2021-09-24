@@ -1,10 +1,39 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
 import kornia
+import cv2
+import numpy as np
 
 from ops.raycast_rgbd.raycast_rgbd import RaycastRGBD
 import pdb
+
+def depth_to_normals(depth_img_batch):
+    normals_batch = []
+    for i in range(depth_img_batch.shape[0]):
+        depth_img = depth_img_batch[i]
+        depth_img = depth_img.cpu().numpy()
+
+        zx = cv2.Sobel(depth_img, cv2.CV_64F, 1, 0, ksize=27)
+        zy = cv2.Sobel(depth_img, cv2.CV_64F, 0, 1, ksize=27)
+
+        normals = np.dstack((-zx, -zy, np.ones_like(depth_img)))
+        n = np.linalg.norm(normals, axis=2)
+        normals[:, :, 0] /= n
+        normals[:, :, 1] /= n
+        normals[:, :, 2] /= n
+
+        # normals += 1
+        # normals /= 2
+
+        normals = torch.from_numpy(normals).cuda()
+        normals_batch.append(normals)
+
+    normals_batch = torch.stack(normals_batch, dim=0)
+
+    return normals_batch
+
 
 class DiffRenderer(nn.Module):
     def __init__(self, cfg):
@@ -90,15 +119,32 @@ class DiffRenderer(nn.Module):
                 depth_target = depths_target_batch[view_idx].unsqueeze(0)
 
                 # tmp_normal = kornia.geometry.depth_to_normals(depth_target.unsqueeze(0), intrinsics_matrix_batch[view_idx].unsqueeze(0), normalize_points=False)
-                # tmp_normal = tmp_normal.permute(0,2,3,1)
+
+                #pdb.set_trace()
+                # raycast_normal_target = depth_to_normals(depth_target)
+                # raycast_normal_target = tmp_normal.permute(0,2,3,1)
 
                 valid = (raycast_depth != -float('inf')) & (depth_target != 0)
+                
+                invalid = raycast_depth != -float('inf')
+                raycast_depth = raycast_depth * invalid
+                raycast_depth[torch.isnan(raycast_depth)] = 0
+
+                # pdb.set_trace()
+
+                raycast_depth = self.normalize(raycast_depth)
+                depth_target = self.normalize(depth_target)
                 # valid = (raycast_depth != -float('inf')) & (raycast_depth_target != -float('inf'))
 
                 if valid.sum() != 0:
-                    depth_loss += (torch.mean(torch.abs(self.normalize(raycast_depth[valid]) - self.normalize(depth_target[valid]))) * self.cfg.MODEL.RERENDER.WEIGHT) / self.n_views
+                    depth_loss += (torch.mean(torch.abs(raycast_depth[valid] - depth_target[valid])) * self.cfg.MODEL.RERENDER.WEIGHT) / self.n_views
+                    # depth_loss += (torch.mean(torch.abs(self.normalize(raycast_depth[valid]) - self.normalize(depth_target[valid]))) * self.cfg.MODEL.RERENDER.WEIGHT) / self.n_views
                     # loss += (torch.mean(torch.abs(self.normalize(raycast_depth[valid]) - self.normalize(raycast_depth_target[valid]))) * self.cfg.MODEL.RERENDER.WEIGHT) / self.n_views
             
+                # raycast_normal_target[]
+                raycast_normal_target[:,:,:,0][depth_target == 0] = -float('inf')
+                raycast_normal_target[:,:,:,1][depth_target == 0] = -float('inf')
+                raycast_normal_target[:,:,:,2][depth_target == 0] = -float('inf')
                 valid_normal = (raycast_normal != -float('inf')) & (raycast_normal_target != -float('inf'))
 
                 if valid_normal.sum() != 0:

@@ -29,7 +29,7 @@ class RayCastRGBDFunction(Function):
 
     @staticmethod
     def backward(ctx, grad_color, grad_depth, grad_normal):
-        sparse_mapping, mapping3dto2d, mapping3dto2d_num, dims, d_color, d_depth, d_normal = ctx.saved_variables;
+        sparse_mapping, mapping3dto2d, mapping3dto2d_num, dims, d_color, d_depth, d_normal = ctx.saved_tensors;
         raycast_rgbd_cuda.backward(
             grad_color.contiguous(), grad_depth.contiguous(), grad_normal.contiguous(), sparse_mapping, mapping3dto2d, mapping3dto2d_num, dims, d_color, d_depth, d_normal)
         
