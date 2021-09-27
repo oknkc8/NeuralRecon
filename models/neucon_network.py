@@ -263,8 +263,11 @@ class NeuConNet(nn.Module):
                         rerender_loss, normal_loss, depths, depths_target, normals, normals_target = self.raycaster(up_coords, inputs['vol_origin_partial'], tsdf, tsdf_target,
                                                                                                                     depths_gt, intrinsics_depth, extrinsics)
                         """
+                        # pdb.set_trace()
+                        # intrinsics_depth[:,:, :2, :3] /= interval
+                        # extrinsics[:,:, :3, :4] /= interval
                         rerender_loss, depths, depths_target = self.raycaster(up_coords, inputs['vol_origin_partial'], tsdf, tsdf_target,
-                                                                              depths_gt, intrinsics_depth, extrinsics)
+                                                                              depths_gt, intrinsics_depth, extrinsics, i)
                         # rerender_loss, depths, depths_target = self.raycaster(up_coords, inputs['vol_origin_partial'], tsdf, tsdf_target,
                         #                                                       feats, intrinsics, extrinsics)
                         loss_dict.update({f'rerender_loss_{i}': rerender_loss})
