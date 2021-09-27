@@ -256,18 +256,23 @@ class NeuConNet(nn.Module):
                                          mask=grid_mask,
                                          pos_weight=self.cfg.MODEL.POS_WEIGHT)
                 
-                if apply_loss and i == self.cfg.MODEL.N_LAYER - 1:
+                # if apply_loss and i == self.cfg.MODEL.N_LAYER - 1:
+                if apply_loss:
                     if self.cfg.MODEL.RERENDER.LOSS:
+                        """
                         rerender_loss, normal_loss, depths, depths_target, normals, normals_target = self.raycaster(up_coords, inputs['vol_origin_partial'], tsdf, tsdf_target,
                                                                                                                     depths_gt, intrinsics_depth, extrinsics)
+                        """
+                        rerender_loss, depths, depths_target = self.raycaster(up_coords, inputs['vol_origin_partial'], tsdf, tsdf_target,
+                                                                              depths_gt, intrinsics_depth, extrinsics)
                         # rerender_loss, depths, depths_target = self.raycaster(up_coords, inputs['vol_origin_partial'], tsdf, tsdf_target,
                         #                                                       feats, intrinsics, extrinsics)
-                        loss_dict.update({f'rerender_loss': rerender_loss})
-                        loss_dict.update({f'normal_loss': normal_loss})
-                        image_dict.update({f'depth': depths[-1].unsqueeze(0)})
-                        image_dict.update({f'depth_target': depths_target[0].unsqueeze(0)})
-                        image_dict.update({f'normal': normals[-1].unsqueeze(0)})
-                        image_dict.update({f'normal_target': normals_target[-1].unsqueeze(0)})
+                        loss_dict.update({f'rerender_loss_{i}': rerender_loss})
+                        # loss_dict.update({f'normal_loss': normal_loss})
+                        image_dict.update({f'depth_{i}': depths[-1].unsqueeze(0)})
+                        image_dict.update({f'depth_target_{i}': depths_target[0].unsqueeze(0)})
+                        # image_dict.update({f'normal': normals[-1].unsqueeze(0)})
+                        # image_dict.update({f'normal_target': normals_target[-1].unsqueeze(0)})
 
                     # if self.cfg.MODEL.PROJECTION.LOSS:
                     #     projection_loss, depths, depths_target, depths_target_masked = projection_2d_loss(self.cfg.MODEL, up_coords, inputs['vol_origin_partial'],

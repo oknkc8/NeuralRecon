@@ -1,14 +1,15 @@
 DATASET: 'scannet'
 BATCH_SIZE: 1
 SAVE_SCENE_MESH: False
-# LOGDIR: './checkpoints'
-LOGDIR: './checkpoints/debug'
+LOGDIR: './checkpoints'
+# LOGDIR: './checkpoints/debug'
 SAVE_FREQ: 1
 SUMMARY_FREQ: 1
 MODE: 'train'
 # LOADCKPT: './checkpoints/08-19-03-40(original_part_1)/model_000020.ckpt'
-LOADCKPT: './checkpoints/08-20-13-03(original_part_2)/model_000035.ckpt'
+# LOADCKPT: './checkpoints/08-20-13-03(original_part_2)/model_000030.ckpt'
 # LOADCKPT: './checkpoints/08-27-19-34/model_000018.ckpt'
+LOADCKPT: './checkpoints/09-17-16-36/model_000030.ckpt'
 
 TRAIN:
   PATH: '../data/DATAROOT_SCANNET/scannet'
@@ -18,7 +19,7 @@ TRAIN:
   LR: 1e-3
   N_WORKERS: 8
   LREPOCHS: '12,24,48:2'
-  APPLY_LOSS: 20
+  APPLY_LOSS: 30
   APPLY_GRU: 20
 
 TEST:
@@ -46,11 +47,11 @@ MODEL:
 
   RERENDER:
     LOSS: True
-    WEIGHT: 2
+    WEIGHT: 20
     MAX_NUM_POINTS: 3000000
     RAYCAST_DEPTH_MAX: 15
 
-  LW: [1.0, 0.8, 0.64]
+  LW: [1.0, 1.0, 1.0]
 
   THRESHOLDS: [0.0, 0.0, 0.0]
   POS_WEIGHT: 1.5
