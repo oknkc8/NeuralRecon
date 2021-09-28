@@ -40,6 +40,18 @@ class BasicDeconvolutionBlock(nn.Module):
     def forward(self, x):
         return self.net(x)
 
+class FeedForwardLinearBlock(nn.Module):
+    def __init__(self, inc, outc):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(inc, outc),
+            nn.ReLU(),
+            nn.Linear(outc, inc))
+        self.layernorm = nn.LayerNorm(inc)
+    
+    def forward(self, x):
+        x = x + self.net(x)
+        return self.layernorm(x)
 
 class ResidualBlock(nn.Module):
     def __init__(self, inc, outc, ks=3, stride=1, dilation=1):

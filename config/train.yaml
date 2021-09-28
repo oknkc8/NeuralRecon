@@ -4,7 +4,7 @@ SAVE_SCENE_MESH: False
 LOGDIR: './checkpoints'
 # LOGDIR: './checkpoints/debug'
 SAVE_FREQ: 1
-SUMMARY_FREQ: 1
+SUMMARY_FREQ: 50
 MODE: 'train'
 # LOADCKPT: './checkpoints/08-19-03-40(original_part_1)/model_000020.ckpt'
 # LOADCKPT: './checkpoints/08-20-13-03(original_part_2)/model_000030.ckpt'
@@ -47,7 +47,7 @@ MODEL:
 
   RERENDER:
     LOSS: True
-    WEIGHT: 20
+    WEIGHT: 10
     MAX_NUM_POINTS: 3000000
     RAYCAST_DEPTH_MAX: 15
 

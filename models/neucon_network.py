@@ -6,6 +6,7 @@ from torchsparse.tensor import PointTensor
 from loguru import logger
 
 from models.modules import SPVCNN
+from models.modules import FeedForwardLinearBlock
 from utils import apply_log_transform
 from .gru_fusion import GRUFusion
 from ops.back_project import back_project
@@ -37,6 +38,7 @@ class NeuConNet(nn.Module):
         # sparse conv
         self.sp_convs = nn.ModuleList()
         # MLPs that predict tsdf and occupancy.
+        self.tsdf_occ_sharing_preds = nn.ModuleList()
         self.tsdf_preds = nn.ModuleList()
         self.occ_preds = nn.ModuleList()
         for i in range(len(cfg.MODEL.THRESHOLDS)):
@@ -47,16 +49,22 @@ class NeuConNet(nn.Module):
                        vres=self.cfg.MODEL.VOXEL_SIZE * 2 ** (self.n_scales - i),
                        dropout=self.cfg.MODEL.SPARSEREG.DROPOUT)
             )
-            self.tsdf_preds.append(nn.Linear(channels[i], 1))
+            # self.tsdf_preds.append(nn.Linear(channels[i], 1))
             # self.tsdf_preds.append(nn.Sequential(
             #                         nn.Linear(channels[i], 1),
             #                         nn.Tanh()
             #                     ))
-            self.occ_preds.append(nn.Linear(channels[i], 1))
+            # self.occ_preds.append(nn.Linear(channels[i], 1))
             # self.occ_preds.append(nn.Sequential(
             #                         nn.Linear(channels[i], 1),
             #                         nn.Sigmoid()
             #                     ))
+            self.tsdf_occ_sharing_preds.append(nn.Sequential(
+                                                    FeedForwardLinearBlock(channels[i], channels[i] * 2),
+                                                    FeedForwardLinearBlock(channels[i], channels[i] * 2),
+                                                    FeedForwardLinearBlock(channels[i], channels[i] * 2)))
+            self.tsdf_preds.append(nn.Linear(channels[i], 1))
+            self.occ_preds.append(nn.Linear(channels[i], 1))
         
         self.raycaster = DiffRenderer(cfg)
         
@@ -236,8 +244,10 @@ class NeuConNet(nn.Module):
                     grid_mask = torch.ones_like(feat[:, 0]).bool()
                     # print('grid_mask:', grid_mask.shape)
 
-            tsdf = self.tsdf_preds[i](feat)
-            occ = self.occ_preds[i](feat)
+            common_feat = self.tsdf_occ_sharing_preds[i](feat)
+            tsdf = self.tsdf_preds[i](common_feat)
+            occ = self.occ_preds[i](common_feat)
+
             # print('tsdf:', tsdf.shape)
             # print('occ:', occ.shape)
 

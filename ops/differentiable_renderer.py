@@ -40,7 +40,7 @@ class DiffRenderer(nn.Module):
         super(DiffRenderer, self).__init__()
         self.cfg = cfg
         self.voxel_size = cfg.MODEL.VOXEL_SIZE
-        self.truncation = 5
+        self.truncation = 3
         self.ray_increment = 0.3 * self.truncation
         self.thresh_sample_dist = 5 * self.ray_increment
         self.max_num_locs_per_sample = cfg.MODEL.RERENDER.MAX_NUM_POINTS
