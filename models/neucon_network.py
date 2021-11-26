@@ -60,10 +60,13 @@ class NeuConNet(nn.Module):
             #                         nn.Sigmoid()
             #                     ))
             self.tsdf_occ_sharing_preds.append(nn.Sequential(
+                                                    nn.Linear(channels[i], channels[i]),
                                                     FeedForwardLinearBlock(channels[i], channels[i] * 2),
                                                     FeedForwardLinearBlock(channels[i], channels[i] * 2),
                                                     FeedForwardLinearBlock(channels[i], channels[i] * 2)))
-            self.tsdf_preds.append(nn.Linear(channels[i], 1))
+            self.tsdf_preds.append(nn.Sequential(
+                                    nn.Linear(channels[i], 1),
+                                    nn.Tanh()))
             self.occ_preds.append(nn.Linear(channels[i], 1))
         
         self.raycaster = DiffRenderer(cfg)
@@ -266,8 +269,8 @@ class NeuConNet(nn.Module):
                                          mask=grid_mask,
                                          pos_weight=self.cfg.MODEL.POS_WEIGHT)
                 
-                # if apply_loss and i == self.cfg.MODEL.N_LAYER - 1:
-                if apply_loss:
+                if apply_loss and i == self.cfg.MODEL.N_LAYER - 1:
+                # if apply_loss:
                     if self.cfg.MODEL.RERENDER.LOSS:
                         """
                         rerender_loss, normal_loss, depths, depths_target, normals, normals_target = self.raycaster(up_coords, inputs['vol_origin_partial'], tsdf, tsdf_target,

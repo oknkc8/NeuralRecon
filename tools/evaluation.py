@@ -23,6 +23,7 @@ sys.path.append('.')
 import argparse
 import json
 import os
+import glob
 
 import numpy as np
 import pyrender
@@ -100,8 +101,8 @@ class Renderer():
         self.renderer.delete()
 
 
-def process(scene, total_scenes_index, total_scenes_count):
-    save_path = args.model
+def process(scene, total_scenes_index, total_scenes_count, save_path):
+    # save_path = args.model
     width, height = 640, 480
 
     test_framid = os.listdir(os.path.join(args.data_path, scene, 'color'))
@@ -180,10 +181,10 @@ def process(scene, total_scenes_index, total_scenes_count):
 
 
 @ray.remote(num_cpus=args.num_workers + 1, num_gpus=(1 / args.n_proc))
-def process_with_single_worker(info_files):
+def process_with_single_worker(info_files, save_path):
     metrics = {}
     for i, info_file in enumerate(info_files):
-        scene, temp = process(info_file, i, len(info_files))
+        scene, temp = process(info_file, i, len(info_files), save_path)
         if temp is not None:
             metrics[scene] = temp
     return metrics
@@ -206,21 +207,47 @@ def main():
 
     info_files = split_list(info_files, all_proc)
 
-    ray_worker_ids = []
-    for w_idx in range(all_proc):
-        ray_worker_ids.append(process_with_single_worker.remote(info_files[w_idx]))
+    result_folders = glob.glob(os.path.join(args.model, '*'))
+    result_folders.sort()
 
-    results = ray.get(ray_worker_ids)
+    for save_path in result_folders:
+        if 'legacy' in save_path:
+            continue
 
-    metrics = {}
-    for r in results:
-        metrics.update(r)
+        print('=' * 40)
+        print(save_path)
+        print('=' * 40)
+        ray_worker_ids = []
+        for w_idx in range(all_proc):
+            ray_worker_ids.append(process_with_single_worker.remote(info_files[w_idx], save_path))
 
-    rslt_file = os.path.join(args.model, 'metrics.json')
-    json.dump(metrics, open(rslt_file, 'w'))
+        results = ray.get(ray_worker_ids)
 
-    # display results
-    visualize(rslt_file)
+        metrics = {}
+        for r in results:
+            metrics.update(r)
+
+        rslt_file = os.path.join(save_path, 'metrics.json')
+        json.dump(metrics, open(rslt_file, 'w'))
+
+        # display results
+        visualize(rslt_file)    
+
+    # ray_worker_ids = []
+    # for w_idx in range(all_proc):
+    #     ray_worker_ids.append(process_with_single_worker.remote(info_files[w_idx]))
+
+    # results = ray.get(ray_worker_ids)
+
+    # metrics = {}
+    # for r in results:
+    #     metrics.update(r)
+
+    # rslt_file = os.path.join(args.model, 'metrics.json')
+    # json.dump(metrics, open(rslt_file, 'w'))
+
+    # # display results
+    # visualize(rslt_file)
 
 
 if __name__ == "__main__":
