@@ -37,10 +37,15 @@ class NeuConNet(nn.Module):
             self.gru_fusion = GRUFusion(cfg.MODEL, channels)
         # sparse conv
         self.sp_convs = nn.ModuleList()
+        self.aug_sp_convs = nn.ModuleList()
         # MLPs that predict tsdf and occupancy.
         self.tsdf_occ_sharing_preds = nn.ModuleList()
         self.tsdf_preds = nn.ModuleList()
         self.occ_preds = nn.ModuleList()
+        self.aug_tsdf_occ_sharing_preds = nn.ModuleList()
+        self.aug_tsdf_preds = nn.ModuleList()
+        self.aug_occ_preds = nn.ModuleList()
+
         for i in range(len(cfg.MODEL.THRESHOLDS)):
             self.sp_convs.append(
                 SPVCNN(num_classes=1, in_channels=ch_in[i],
@@ -49,6 +54,14 @@ class NeuConNet(nn.Module):
                        vres=self.cfg.MODEL.VOXEL_SIZE * 2 ** (self.n_scales - i),
                        dropout=self.cfg.MODEL.SPARSEREG.DROPOUT)
             )
+            self.aug_sp_convs.append(
+                SPVCNN(num_classes=1, in_channels=2,
+                       pres=1,
+                       cr=1 / 2 ** i,
+                       vres=self.cfg.MODEL.VOXEL_SIZE * 2 ** (self.n_scales - i),
+                       dropout=self.cfg.MODEL.SPARSEREG.DROPOUT)
+            )
+            
             # self.tsdf_preds.append(nn.Linear(channels[i], 1))
             # self.tsdf_preds.append(nn.Sequential(
             #                         nn.Linear(channels[i], 1),
@@ -68,6 +81,16 @@ class NeuConNet(nn.Module):
                                     nn.Linear(channels[i], 1),
                                     nn.Tanh()))
             self.occ_preds.append(nn.Linear(channels[i], 1))
+
+            self.aug_tsdf_occ_sharing_preds.append(nn.Sequential(
+                                                    nn.Linear(channels[i], channels[i]),
+                                                    FeedForwardLinearBlock(channels[i], channels[i] * 2),
+                                                    FeedForwardLinearBlock(channels[i], channels[i] * 2),
+                                                    FeedForwardLinearBlock(channels[i], channels[i] * 2)))
+            self.aug_tsdf_preds.append(nn.Sequential(
+                                    nn.Linear(channels[i], 1),
+                                    nn.Tanh()))
+            self.aug_occ_preds.append(nn.Linear(channels[i], 1))
         
         self.raycaster = DiffRenderer(cfg)
         
@@ -84,6 +107,17 @@ class NeuConNet(nn.Module):
         with torch.no_grad():
             tsdf_target = inputs['tsdf_list'][scale]
             occ_target = inputs['occ_list'][scale]
+            coords_down = coords.detach().clone().long()
+            # 2 ** scale == interval
+            coords_down[:, 1:] = (coords[:, 1:] // 2 ** scale)
+            tsdf_target = tsdf_target[coords_down[:, 0], coords_down[:, 1], coords_down[:, 2], coords_down[:, 3]]
+            occ_target = occ_target[coords_down[:, 0], coords_down[:, 1], coords_down[:, 2], coords_down[:, 3]]
+            return tsdf_target, occ_target
+
+    def get_sparse_input(self, coords, inputs, scale):
+        with torch.no_grad():
+            tsdf_target = inputs['sparse_tsdf_list'][scale]
+            occ_target = inputs['sparse_occ_list'][scale]
             coords_down = coords.detach().clone().long()
             # 2 ** scale == interval
             coords_down[:, 1:] = (coords[:, 1:] // 2 ** scale)
@@ -209,10 +243,19 @@ class NeuConNet(nn.Module):
 
             if not self.cfg.MODEL.FUSION.FUSION_ON or (self.cfg.MODEL.FUSION.FUSION_ON and not apply_gru):
                 tsdf_target, occ_target = self.get_target(up_coords, inputs, scale)
+                # print('tsdf_target:', tsdf_target.shape)
+                # print('occ_target:', occ_target.shape)
+            
+            if self.cfg.MODEL.AUGMENTATION.AUGMENTATION_ON:
+                sparse_tsdf_input, sparse_occ_input = self.get_sparse_input(up_coords, inputs, scale)
+                # print('sparse_tsdf_input:', sparse_tsdf_input.shape)
+                # print('sparse_occ_input:', sparse_occ_input.shape)
 
             """ ----convert to aligned camera coordinate---- """
             # print('-'*10 + 'convert to aligned camera coordinate' + '-'*10)
             r_coords = up_coords.detach().clone().float()
+            sparse_up_coords_1 = up_coords.detach().clone().float()
+            sparse_up_coords_2 = up_coords.detach().clone().float()
             for b in range(bs):
                 batch_ind = torch.nonzero(up_coords[:, 0] == b).squeeze(1)
                 coords_batch = up_coords[batch_ind][:, 1:].float()
@@ -238,21 +281,80 @@ class NeuConNet(nn.Module):
             """ ----gru fusion---- """
             # print('-'*10 + 'gru fusion' + '-'*10)
             if self.cfg.MODEL.FUSION.FUSION_ON and apply_gru:
-                up_coords, feat, tsdf_target, occ_target = self.gru_fusion(up_coords, feat, inputs, i)
-                # print('up_coords:', up_coords.shape)
-                # print('feat:', feat.shape)
-                # print('tsdf_target:', tsdf_target.shape)
-                # print('occ_target:', occ_target.shape)
+                up_coords, feat, tsdf_target, occ_target, sparse_tsdf_input, sparse_occ_input = self.gru_fusion(up_coords, feat, inputs, i)
                 if self.cfg.MODEL.FUSION.FULL:
                     grid_mask = torch.ones_like(feat[:, 0]).bool()
-                    # print('grid_mask:', grid_mask.shape)
 
+            # print('feat:',feat.shape)
+            # tsdf = self.tsdf_preds[i](feat)
+            # occ = self.occ_preds[i](feat)
             common_feat = self.tsdf_occ_sharing_preds[i](feat)
             tsdf = self.tsdf_preds[i](common_feat)
             occ = self.occ_preds[i](common_feat)
 
             # print('tsdf:', tsdf.shape)
             # print('occ:', occ.shape)
+            # print('tsdf_target:', tsdf_target.shape)
+            # print('occ_target:', occ_target.shape)
+
+            # print()
+
+            """ -----sparse-to-dense augmentation """
+            if self.cfg.MODEL.AUGMENTATION.AUGMENTATION_ON:
+                sparse_tsdf_target_1 = tsdf_target
+                sparse_occ_target_1 = occ_target
+                sparse_tsdf_target_2 = tsdf_target
+                sparse_occ_target_2 = occ_target
+                """
+                    input: concat[tsdf, occ]
+                """
+                if self.training:
+                    # use more sparse gt
+                    sparse_r_coords_1 = up_coords.detach().clone().float()
+                    for b in range(bs):
+                        batch_ind = torch.nonzero(up_coords[:, 0] == b).squeeze(1)
+                        coords_batch = up_coords[batch_ind][:, 1:].float()
+                        coords_batch = coords_batch * self.cfg.MODEL.VOXEL_SIZE + inputs['vol_origin_partial'][b].float()
+                        coords_batch = torch.cat((coords_batch, torch.ones_like(coords_batch[:, :1])), dim=1)
+                        coords_batch = coords_batch @ inputs['world_to_aligned_camera'][b, :3, :].permute(1, 0).contiguous()
+                        sparse_r_coords_1[batch_ind, 1:] = coords_batch
+                    sparse_r_coords_1 = sparse_r_coords_1[:, [1, 2, 3, 0]]
+
+                    sparse_tsdf_gt = sparse_tsdf_input.view(-1, 1)
+                    sparse_occ_gt = sparse_occ_input.view(-1, 1).float()
+                    point_sparse_input_1 = PointTensor(torch.cat([sparse_tsdf_gt, sparse_occ_gt], dim=-1), sparse_r_coords_1)
+                    sparse_output_1 = self.aug_sp_convs[i](point_sparse_input_1)
+
+                    if self.cfg.MODEL.FUSION.FUSION_ON and apply_gru:
+                        sparse_up_coords_1, sparse_output_1, sparse_tsdf_target_1, sparse_occ_target_1, _, _ = self.gru_fusion(sparse_up_coords_1, sparse_output_1, inputs, i)
+                    
+                    sparse_common_feat_1 = self.aug_tsdf_occ_sharing_preds[i](sparse_output_1)
+                    sparse_tsdf_1 = self.aug_tsdf_preds[i](sparse_common_feat_1)
+                    sparse_occ_1 = self.aug_occ_preds[i](sparse_common_feat_1)
+                
+                # use self-supervised tsdf volume
+                sparse_r_coords_2 = up_coords.detach().clone().float()
+                for b in range(bs):
+                    batch_ind = torch.nonzero(up_coords[:, 0] == b).squeeze(1)
+                    coords_batch = up_coords[batch_ind][:, 1:].float()
+                    coords_batch = coords_batch * self.cfg.MODEL.VOXEL_SIZE + inputs['vol_origin_partial'][b].float()
+                    coords_batch = torch.cat((coords_batch, torch.ones_like(coords_batch[:, :1])), dim=1)
+                    coords_batch = coords_batch @ inputs['world_to_aligned_camera'][b, :3, :].permute(1, 0).contiguous()
+                    sparse_r_coords_2[batch_ind, 1:] = coords_batch
+                sparse_r_coords_2 = sparse_r_coords_2[:, [1, 2, 3, 0]]
+
+                sparse_tsdf_prev = tsdf.view(-1, 1)
+                sparse_occ_prev = occ.view(-1, 1)
+                point_sparse_input_2 = PointTensor(torch.cat([sparse_tsdf_prev, sparse_occ_prev], dim=-1), sparse_r_coords_2)
+                sparse_output_2 = self.aug_sp_convs[i](point_sparse_input_2)
+
+                if self.cfg.MODEL.FUSION.FUSION_ON and apply_gru:
+                    sparse_up_coords_2, sparse_output_2, sparse_tsdf_target_2, sparse_occ_target_2, _, _ = self.gru_fusion(sparse_up_coords_2, sparse_output_2, inputs, i)
+                
+                sparse_common_feat_2 = self.aug_tsdf_occ_sharing_preds[i](sparse_output_2)
+                sparse_tsdf_2 = self.aug_tsdf_preds[i](sparse_common_feat_2)
+                sparse_occ_2 = self.aug_occ_preds[i](sparse_common_feat_2)
+
 
             """ -------compute loss------- """
             depths_gt = inputs['depth']
@@ -264,52 +366,99 @@ class NeuConNet(nn.Module):
             # print('tsdf_target:', tsdf_target.shape)                
             # print('tsdf_target:', tsdf_target.unique())
             # print('tsdf:', tsdf.detach().unique())
-            if tsdf_target is not None:
-                loss = self.compute_loss(tsdf, occ, tsdf_target, occ_target,
-                                         mask=grid_mask,
-                                         pos_weight=self.cfg.MODEL.POS_WEIGHT)
+            if tsdf_target is not None:                
+                if not self.training and self.cfg.MODEL.AUGMENTATION.AUGMENTATION_ON:
+                    loss = self.compute_loss(sparse_tsdf_2, sparse_occ_2, sparse_tsdf_target_2, sparse_occ_target_2,
+                                            mask=grid_mask,
+                                            pos_weight=self.cfg.MODEL.POS_WEIGHT)
+                else:
+                    loss = self.compute_loss(tsdf, occ, tsdf_target, occ_target,
+                                            mask=grid_mask,
+                                            pos_weight=self.cfg.MODEL.POS_WEIGHT)
                 
-                if apply_loss and i == self.cfg.MODEL.N_LAYER - 1:
-                # if apply_loss:
+                if self.training and self.cfg.MODEL.AUGMENTATION.AUGMENTATION_ON:
+                    aug_loss_1 = self.compute_loss(sparse_tsdf_1, sparse_occ_1, sparse_tsdf_target_1, sparse_occ_target_1,
+                                                mask=grid_mask,
+                                                pos_weight=self.cfg.MODEL.POS_WEIGHT)
+                    aug_loss_2 = self.compute_loss(sparse_tsdf_2, sparse_occ_2, sparse_tsdf_target_2, sparse_occ_target_2,
+                                                mask=grid_mask,
+                                                pos_weight=self.cfg.MODEL.POS_WEIGHT)
+                    aug_loss_1 *= self.cfg.MODEL.AUGMENTATION.WEIGHT
+                    aug_loss_1 /= self.cfg.MODEL.AUGMENTATION.LOSS_RATIO
+                    aug_loss_2 *= self.cfg.MODEL.AUGMENTATION.WEIGHT
+
+                    loss_dict.update({f'aug_loss_using_gt_{i}': aug_loss_1})
+                    loss_dict.update({f'aug_loss_using_self_{i}': aug_loss_2})
+
+                # if apply_loss and i == self.cfg.MODEL.N_LAYER - 1:
+                if i == self.cfg.MODEL.N_LAYER - 1:
                     if self.cfg.MODEL.RERENDER.LOSS:
-                        """
-                        rerender_loss, normal_loss, depths, depths_target, normals, normals_target = self.raycaster(up_coords, inputs['vol_origin_partial'], tsdf, tsdf_target,
-                                                                                                                    depths_gt, intrinsics_depth, extrinsics)
-                        """
-                        # pdb.set_trace()
+                        # visualize gt
+                        _, depths, depths_target, normals_gt = self.raycaster(up_coords, inputs['vol_origin_partial'], tsdf_target.view(-1, 1), tsdf_target,
+                                                                                       depths_gt, intrinsics_depth, extrinsics, i)
+                        image_dict.update({f'depth_gt_{i}': depths[-1].unsqueeze(0)})
+                        image_dict.update({f'depth_target_{i}': depths_target[0].unsqueeze(0)})
+                        image_dict.update({f'normal_gt_{i}': normals_gt[-1].unsqueeze(0)})
+
                         # intrinsics_depth[:,:, :2, :3] /= interval
                         # extrinsics[:,:, :3, :4] /= interval
-                        rerender_loss, depths, depths_target = self.raycaster(up_coords, inputs['vol_origin_partial'], tsdf, tsdf_target,
-                                                                              depths_gt, intrinsics_depth, extrinsics, i)
+                        rerender_loss, depths, depths_target, normals = self.raycaster(up_coords, inputs['vol_origin_partial'], tsdf, tsdf_target,
+                                                                                       depths_gt, intrinsics_depth, extrinsics, i)
                         # rerender_loss, depths, depths_target = self.raycaster(up_coords, inputs['vol_origin_partial'], tsdf, tsdf_target,
                         #                                                       feats, intrinsics, extrinsics)
-                        loss_dict.update({f'rerender_loss_{i}': rerender_loss})
+                        if apply_loss:
+                            loss_dict.update({f'rerender_loss_{i}': rerender_loss})
+                            if self.cfg.MODEL.RERENDER.NORMAL:
+                                valid_normal = (normals_gt != float('inf')) & (normals != float('inf'))
+                                rerender_normal_loss = (torch.mean(torch.abs(normals_gt[valid_normal] - normals[valid_normal])) * self.cfg.MODEL.RERENDER.WEIGHT) / self.cfg.TRAIN.N_VIEWS
+                                loss_dict.update({f'rerender_normal_loss_{i}': rerender_normal_loss})
                         # loss_dict.update({f'normal_loss': normal_loss})
                         image_dict.update({f'depth_{i}': depths[-1].unsqueeze(0)})
-                        image_dict.update({f'depth_target_{i}': depths_target[0].unsqueeze(0)})
-                        # image_dict.update({f'normal': normals[-1].unsqueeze(0)})
+                        # image_dict.update({f'depth_target_{i}': depths_target[0].unsqueeze(0)})
+                        image_dict.update({f'normal_{i}': normals[-1].unsqueeze(0)})
                         # image_dict.update({f'normal_target': normals_target[-1].unsqueeze(0)})
 
-                    # if self.cfg.MODEL.PROJECTION.LOSS:
-                    #     projection_loss, depths, depths_target, depths_target_masked = projection_2d_loss(self.cfg.MODEL, up_coords, inputs['vol_origin_partial'],
-                    #                                                                                     self.cfg.MODEL.VOXEL_SIZE, tsdf, depths_gt, feats, KRcam)
-                    #     loss_dict[f'projection_loss'] += projection_loss
-                    #     image_dict.update({f'projection_depth_{i}': depths})
-                    #     image_dict.update({f'projection_depth_target_masked{i}': depths_target_masked})
-                    #     image_dict.update({f'projection_depth_target': depths_target})
+                        if self.training and self.cfg.MODEL.AUGMENTATION.AUGMENTATION_ON:
+                            # visualize sparse input using gt
+                            _, depths, _, normals = self.raycaster(up_coords, inputs['vol_origin_partial'], sparse_tsdf_gt, tsdf_target,
+                                                                   depths_gt, intrinsics_depth, extrinsics, i)
+                            image_dict.update({f'aug_depth_spare_input_{i}': depths[-1].unsqueeze(0)})
+                            image_dict.update({f'aug_normal_sparse_input_{i}': normals[-1].unsqueeze(0)})
 
-                    # if self.cfg.MODEL.FOV_TSDF_LOSS.LOSS:
-                    #     fov_loss = fov_tsdf_loss(self.cfg.MODEL, up_coords, inputs['vol_origin_partial'],
-                    #                              self.cfg.MODEL.VOXEL_SIZE, tsdf, tsdf_target, grid_mask, KRcam, feats)
-                        
-                    #     loss += fov_loss
-                    #     loss_dict[f'fov_tsdf_loss'] += fov_loss
+                            # use more sparse gt
+                            rerender_loss, depths, depths_target, normals = self.raycaster(sparse_up_coords_1, inputs['vol_origin_partial'], sparse_tsdf_1, sparse_tsdf_target_1,
+                                                                                           depths_gt, intrinsics_depth, extrinsics, i)
+                            if apply_loss:
+                                loss_dict.update({f'aug_rerender_loss_using_gt_{i}': rerender_loss})
+                            # loss_dict.update({f'normal_loss': normal_loss})
+                            image_dict.update({f'aug_depth_using_gt_{i}': depths[-1].unsqueeze(0)})
+                            # image_dict.update({f'aug_depth_target_using_gt_{i}': depths_target[0].unsqueeze(0)})
+                            image_dict.update({f'aug_normal_using_gt_{i}': normals[-1].unsqueeze(0)})
+
+                            # use self-supervised tsdf volume
+                            rerender_loss, depths, depths_target, normals = self.raycaster(sparse_up_coords_2, inputs['vol_origin_partial'], sparse_tsdf_2, sparse_tsdf_target_2,
+                                                                                           depths_gt, intrinsics_depth, extrinsics, i)
+                            if apply_loss:
+                                loss_dict.update({f'aug_rerender_loss_using_self_{i}': rerender_loss})
+                                if self.cfg.MODEL.RERENDER.NORMAL:
+                                    valid_normal = (normals_gt != float('inf')) & (normals != float('inf'))
+                                    rerender_normal_loss = (torch.mean(torch.abs(normals_gt[valid_normal] - normals[valid_normal])) * self.cfg.MODEL.RERENDER.WEIGHT) / self.cfg.TRAIN.N_VIEWS
+                                    loss_dict.update({f'aug_rerender_normal_loss_using_self_{i}': rerender_normal_loss})
+                            # loss_dict.update({f'normal_loss': normal_loss})
+                            image_dict.update({f'aug_depth_using_self_{i}': depths[-1].unsqueeze(0)})
+                            # image_dict.update({f'aug_depth_target_using_self_{i}': depths_target[0].unsqueeze(0)})
+                            image_dict.update({f'aug_normal_using_self_{i}': normals[-1].unsqueeze(0)})
+
             else:
                 loss = torch.Tensor(np.array([0])).cuda()[0]
             loss_dict.update({f'tsdf_occ_loss_{i}': loss})
 
 
             """ ------define the sparsity for the next stage----- """
+            if self.cfg.MODEL.AUGMENTATION.AUGMENTATION_ON:
+                tsdf = sparse_tsdf_2
+                occ = sparse_occ_2
+                up_coords = sparse_up_coords_2
             # print('-'*10 + 'define the sparsity for the next stage' + '-'*10)
             occupancy = occ.squeeze(1) > self.cfg.MODEL.THRESHOLDS[i]
             occupancy[grid_mask == False] = False

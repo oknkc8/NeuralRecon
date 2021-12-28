@@ -113,7 +113,8 @@ transform += [transforms.ResizeImage((640, 480)),
               transforms.ToTensor(),
               transforms.RandomTransformSpace(
                   cfg.MODEL.N_VOX, cfg.MODEL.VOXEL_SIZE, random_rotation, random_translation,
-                  paddingXY, paddingZ, max_epoch=cfg.TRAIN.EPOCHS),
+                  paddingXY, paddingZ, max_epoch=cfg.TRAIN.EPOCHS, sparse_keyframe_ratio=cfg.MODEL.AUGMENTATION.KEYFRAME_RATIO),
+                #   paddingXY, paddingZ, max_epoch=cfg.TRAIN.EPOCHS, sparse_aug_on=cfg.MODEL.AUGMENTATION.AUGMENTATION_ON, sparse_keyframe_ratio=cfg.MODEL.AUGMENTATION.KEYFRAME_RATIO),
               transforms.IntrinsicsPoseToProjection(n_views, 4),
               ]
 
@@ -255,7 +256,7 @@ def test(from_latest=False):
             loadckpt = os.path.join(cfg.LOGDIR, ckpt)
             logger.info("resuming " + str(loadckpt))
             state_dict = torch.load(loadckpt)
-            model.load_state_dict(state_dict['model'])
+            model.load_state_dict(state_dict['model'], strict=False)
             epoch_idx = state_dict['epoch']
 
             TestImgLoader.dataset.tsdf_cashe = {}
@@ -329,7 +330,7 @@ def train_sample(sample, apply_loss=False, apply_gru=False):
 def test_sample(sample, save_scene=False):
     model.eval()
 
-    outputs, loss_dict, image_dict = model(sample, save_scene, apply_loss=True, apply_gru=True)
+    outputs, loss_dict, image_dict = model(sample, save_scene, apply_loss=False, apply_gru=True)
     loss = loss_dict['total_loss']
 
     return tensor2float(loss), tensor2float(loss_dict), outputs, image_dict

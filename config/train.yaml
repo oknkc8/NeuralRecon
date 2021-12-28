@@ -9,7 +9,7 @@ MODE: 'train'
 # LOADCKPT: './checkpoints/08-19-03-40(original_part_1)/model_000020.ckpt'
 # LOADCKPT: './checkpoints/08-20-13-03(original_part_2)/model_000030.ckpt'
 # LOADCKPT: './checkpoints/08-27-19-34/model_000018.ckpt'
-LOADCKPT: './checkpoints/10-06-19-03/model_000030.ckpt'
+# LOADCKPT: './checkpoints/10-06-19-03/model_000030.ckpt'
 
 TRAIN:
   PATH: '../data/DATAROOT_SCANNET/scannet'
@@ -19,8 +19,9 @@ TRAIN:
   LR: 1e-3
   N_WORKERS: 8
   LREPOCHS: '12,24,48:2'
-  APPLY_LOSS: 0
+  APPLY_LOSS: 20
   APPLY_GRU: 20
+  SAMPLING: True
 
 TEST:
   PATH: '../data/DATAROOT_SCANNET/scannet'
@@ -47,11 +48,18 @@ MODEL:
 
   RERENDER:
     LOSS: True
+    NORMAL: True
     WEIGHT: 10
     MAX_NUM_POINTS: 3000000
     RAYCAST_DEPTH_MAX: 15
+  
+  AUGMENTATION:
+    AUGMENTATION_ON: True
+    KEYFRAME_RATIO: 8
+    WEIGHT: 2
+    LOSS_RATIO: 2 # using self-supervised / using gt
 
-  LW: [1.0, 0.8, 0.64]
+  LW: [1.0, 1.0, 1.0]
 
   THRESHOLDS: [0.0, 0.0, 0.0]
   POS_WEIGHT: 1.5

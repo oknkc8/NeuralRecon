@@ -4,7 +4,7 @@ SAVE_SCENE_MESH: True
 SAVE_SCENE_MESH_ITER: False
 LOGDIR: './checkpoints/test_model'
 SAVE_FREQ: 1
-SUMMARY_FREQ: 50
+SUMMARY_FREQ: 100
 MODE: 'test'
 
 TRAIN:
@@ -44,6 +44,12 @@ MODEL:
     WEIGHT: 5
     MAX_NUM_POINTS: 1000000
     RAYCAST_DEPTH_MAX: 15
+  
+  AUGMENTATION:
+    AUGMENTATION_ON: True
+    KEYFRAME_RATIO: 8
+    WEIGHT: 3
+    LOSS_RATIO: 2 # using self-supervised / using gt
 
   LW: [1.0, 0.8, 0.64]
 

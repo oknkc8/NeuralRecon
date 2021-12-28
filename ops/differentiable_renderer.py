@@ -125,7 +125,7 @@ class DiffRenderer(nn.Module):
             depths_batch = []
             # depths_target_batch = []
             depths_target_output_batch = []
-            # normals_batch = []
+            normals_batch = []
             # normals_target_batch = []
             coords_batch = torch.cat([coords_batch[:, 2:3], coords_batch[:, 1:2], coords_batch[:, 0:1], coords_batch[:, 3:4]], dim=1)
             coords_batch = coords_batch // (2 ** scale)
@@ -144,7 +144,7 @@ class DiffRenderer(nn.Module):
                 intrinsics_batch[:, 2] = intrinsics_matrix_batch[view_idx, 0, 2] / (2 ** scale)
                 intrinsics_batch[:, 3] = intrinsics_matrix_batch[view_idx, 1, 2] / (2 ** scale)
                 
-                _, raycast_depth, _ = self.raycasters[layer_index](coords_batch, sdf_batch, color, normals_sparse, 
+                _, raycast_depth, raycast_normal = self.raycasters[layer_index](coords_batch, sdf_batch, color, normals_sparse, 
                                                                                 transform_batch.contiguous(), 
                                                                                 intrinsics_batch, origin_batch)
 
@@ -206,6 +206,7 @@ class DiffRenderer(nn.Module):
                 depths_batch.append(torch.clone(raycast_depth.squeeze(0)))
                 depths_target_output_batch.append(depth_target.squeeze(0))
                 # depths_target_batch.append(torch.clone(raycast_depth_target.squeeze(0)))
+                normals_batch.append(torch.clone(raycast_normal.squeeze(0)))
                 """
                 normals_batch.append(torch.clone(raycast_normal.squeeze(0)))
                 normals_target_batch.append(torch.clone(raycast_normal_target.squeeze(0)))
@@ -217,6 +218,8 @@ class DiffRenderer(nn.Module):
             depths_target_output_batch[depths_target_output_batch == -float('inf')] = 0
             # depths_target_batch = torch.stack(depths_target_batch, dim=0)
             # depths_target_batch[depths_target_batch == -float('inf')] = 0
+            normals_batch = torch.stack(normals_batch, dim=0)
+            normals_batch[normals_batch == -float('inf')] = 0
             """
             normals_batch = torch.stack(normals_batch, dim=0)
             normals_batch[normals_batch == -float('inf')] = 0
@@ -228,6 +231,7 @@ class DiffRenderer(nn.Module):
             depths.append(depths_batch)
             # depths_target.append(depths_target_batch)
             depths_target_output.append(depths_target_output_batch)
+            normals.append(normals_batch)
             """
             normals.append(normals_batch)
             normals_target.append(normals_target_batch)
@@ -236,6 +240,7 @@ class DiffRenderer(nn.Module):
         depths = torch.stack(depths, dim=0)
         depths_target_output = torch.stack(depths_target_output, dim=0)
         # depths_target = torch.stack(depths_target, dim=0)
+        normals = torch.stack(normals, dim=0)
         """
         normals = torch.stack(normals, dim=0)
         normals_target = torch.stack(normals_target, dim=0)
@@ -244,7 +249,7 @@ class DiffRenderer(nn.Module):
         """
         return depth_loss, normal_loss, depths, depths_target, normals, normals_target
         """
-        return depth_loss, depths, depths_target_output
+        return depth_loss, depths, depths_target_output, normals
 
     def compute_normals_dense(self, sdf):
         assert(len(sdf.shape) == 5) # batch mode

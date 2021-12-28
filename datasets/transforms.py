@@ -161,7 +161,7 @@ class RandomTransformSpace(object):
     """
 
     def __init__(self, voxel_dim, voxel_size, random_rotation=True, random_translation=True,
-                 paddingXY=1.5, paddingZ=.25, origin=[0, 0, 0], max_epoch=999, max_depth=3.0):
+                 paddingXY=1.5, paddingZ=.25, origin=[0, 0, 0], max_epoch=999, max_depth=3.0, sparse_keyframe_ratio=0.5):
         """
         Args:
             voxel_dim: tuple of 3 ints (nx,ny,nz) specifying
@@ -182,6 +182,8 @@ class RandomTransformSpace(object):
         self.random_rotation = random_rotation
         self.random_translation = random_translation
         self.max_depth = max_depth
+        # self.sparse_aug_on = sparse_aug_on
+        self.sparse_keyframe_ratio = sparse_keyframe_ratio
         self.padding_start = torch.Tensor([paddingXY, paddingXY, paddingZ])
         # no need to pad above (bias towards floor in volume)
         self.padding_end = torch.Tensor([paddingXY, paddingXY, 0])
@@ -306,22 +308,36 @@ class RandomTransformSpace(object):
 
             data['tsdf_list'] = []
             data['occ_list'] = []
+            # if self.sparse_aug_on:
+            data['sparse_tsdf_list'] = []
+            data['sparse_occ_list'] = []
 
             for l, tsdf_s in enumerate(data['tsdf_list_full']):
                 # ------get partial tsdf and occ-------
                 vol_dim_s = torch.tensor(self.voxel_dim) // 2 ** l
+                sparse_vol_dim_s = torch.tensor(self.voxel_dim) // 2 ** l
                 tsdf_vol = TSDFVolumeTorch(vol_dim_s, vol_origin_partial,
                                            voxel_size=self.voxel_size * 2 ** l, margin=3)
+                sparse_tsdf_vol = TSDFVolumeTorch(sparse_vol_dim_s, vol_origin_partial,
+                                                  voxel_size=self.voxel_size * 2 ** l, margin=3)
                 for i in range(data['imgs'].shape[0]):
                     depth_im = data['depth'][i]
                     cam_intr = data['intrinsics'][i]
                     cam_pose = data['extrinsics'][i]
 
                     tsdf_vol.integrate(depth_im, cam_intr, cam_pose, obs_weight=1.)
+                    # if self.sparse_aug_on and i % int(1 / self.sparse_keyframe_ratio) == 0:
+                    if i % self.sparse_keyframe_ratio == 0:
+                        sparse_tsdf_vol.integrate(depth_im, cam_intr, cam_pose, obs_weight=1.)
 
                 tsdf_vol, weight_vol = tsdf_vol.get_volume()
                 occ_vol = torch.zeros_like(tsdf_vol).bool()
                 occ_vol[(tsdf_vol < 0.999) & (tsdf_vol > -0.999) & (weight_vol > 1)] = True
+
+                # if self.sparse_aug_on:
+                sparse_tsdf_vol, sparse_weight_vol = sparse_tsdf_vol.get_volume()
+                sparse_occ_vol = torch.zeros_like(sparse_tsdf_vol).bool()
+                sparse_occ_vol[(sparse_tsdf_vol < 0.999) & (sparse_tsdf_vol > -0.999) & (sparse_weight_vol > 1)] = True
 
                 # grid sample expects coords in [-1,1]
                 coords_world_s = coords.view(3, x, y, z)[:, ::2 ** l, ::2 ** l, ::2 ** l] / 2 ** l
@@ -335,6 +351,7 @@ class RandomTransformSpace(object):
 
                 # bilinear interpolation near surface,
                 # no interpolation along -1,1 boundry
+                
                 tsdf_vol = torch.nn.functional.grid_sample(
                     tsdf_s.view([1, 1] + old_voxel_dim),
                     coords_world_s, mode='nearest', align_corners=align_corners
@@ -345,15 +362,20 @@ class RandomTransformSpace(object):
                 ).squeeze()
                 mask = tsdf_vol.abs() < 1
                 tsdf_vol[mask] = tsdf_vol_bilin[mask]
+                
 
                 # padding_mode='ones' does not exist for grid_sample so replace
                 # elements that were on the boarder with 1.
                 # voxels beyond full volume (prior to croping) should be marked as empty
                 mask = (coords_world_s.abs() >= 1).squeeze(0).any(3)
                 tsdf_vol[mask] = 1
+                sparse_tsdf_vol[mask] = 1
 
                 data['tsdf_list'].append(tsdf_vol)
                 data['occ_list'].append(occ_vol)
+                # if self.sparse_aug_on:
+                data['sparse_tsdf_list'].append(sparse_tsdf_vol)
+                data['sparse_occ_list'].append(sparse_occ_vol)
             data.pop('tsdf_list_full')
             #data.pop('depth')
         data.pop('epoch')
