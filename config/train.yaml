@@ -10,6 +10,7 @@ MODE: 'train'
 # LOADCKPT: './checkpoints/08-20-13-03(original_part_2)/model_000030.ckpt'
 # LOADCKPT: './checkpoints/08-27-19-34/model_000018.ckpt'
 # LOADCKPT: './checkpoints/10-06-19-03/model_000030.ckpt'
+# LOADCKPT: './checkpoints/12-29-14-41/model_000008.ckpt'
 
 TRAIN:
   PATH: '../data/DATAROOT_SCANNET/scannet'
@@ -19,7 +20,7 @@ TRAIN:
   LR: 1e-3
   N_WORKERS: 8
   LREPOCHS: '12,24,48:2'
-  APPLY_LOSS: 20
+  APPLY_LOSS: 10
   APPLY_GRU: 20
   SAMPLING: True
 
