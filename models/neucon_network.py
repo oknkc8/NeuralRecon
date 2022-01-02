@@ -254,8 +254,8 @@ class NeuConNet(nn.Module):
             """ ----convert to aligned camera coordinate---- """
             # print('-'*10 + 'convert to aligned camera coordinate' + '-'*10)
             r_coords = up_coords.detach().clone().float()
-            sparse_up_coords_1 = up_coords.detach().clone().float()
-            sparse_up_coords_2 = up_coords.detach().clone().float()
+            sparse_up_coords_1 = up_coords.clone()
+            sparse_up_coords_2 = up_coords.clone()
             for b in range(bs):
                 batch_ind = torch.nonzero(up_coords[:, 0] == b).squeeze(1)
                 coords_batch = up_coords[batch_ind][:, 1:].float()
