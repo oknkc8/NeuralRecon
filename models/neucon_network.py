@@ -254,8 +254,6 @@ class NeuConNet(nn.Module):
             """ ----convert to aligned camera coordinate---- """
             # print('-'*10 + 'convert to aligned camera coordinate' + '-'*10)
             r_coords = up_coords.detach().clone().float()
-            sparse_up_coords_1 = up_coords.clone()
-            sparse_up_coords_2 = up_coords.clone()
             for b in range(bs):
                 batch_ind = torch.nonzero(up_coords[:, 0] == b).squeeze(1)
                 coords_batch = up_coords[batch_ind][:, 1:].float()
@@ -292,13 +290,8 @@ class NeuConNet(nn.Module):
             tsdf = self.tsdf_preds[i](common_feat)
             occ = self.occ_preds[i](common_feat)
 
-            # print('tsdf:', tsdf.shape)
-            # print('occ:', occ.shape)
-            # print('tsdf_target:', tsdf_target.shape)
-            # print('occ_target:', occ_target.shape)
-
-            # print()
-
+            sparse_up_coords_1 = up_coords.clone()
+            sparse_up_coords_2 = up_coords.clone()
             """ -----sparse-to-dense augmentation """
             if self.cfg.MODEL.AUGMENTATION.AUGMENTATION_ON:
                 sparse_tsdf_target_1 = tsdf_target
