@@ -82,7 +82,7 @@ torch.cuda.manual_seed(cfg.SEED)
 
 # create logger
 if is_main_process():
-    timestamp = (datetime.datetime.utcnow() + datetime.timedelta(hours=9)).strftime("%m-%d-%H-%M")
+    timestamp = (datetime.datetime.utcnow() + datetime.timedelta(hours=9)).strftime("%Y-%m-%d-%H-%M")
 
     if not os.path.isdir(os.path.join(cfg.LOGDIR, timestamp)):
         os.makedirs(os.path.join(cfg.LOGDIR, timestamp))
