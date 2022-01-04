@@ -165,7 +165,8 @@ class DiffRenderer(nn.Module):
                 # raycast_normal_target = depth_to_normals(depth_target)
                 # raycast_normal_target = tmp_normal.permute(0,2,3,1)
 
-                valid = (raycast_depth != -float('inf')) & (depth_target != 0)
+                # valid = (raycast_depth != -float('inf')) & (depth_target != 0)
+                valid = depth_target != 0
                 # valid = (raycast_depth != -float('inf')) & (depth_target != -float('inf'))
                 
                 invalid = raycast_depth != -float('inf')
@@ -200,8 +201,8 @@ class DiffRenderer(nn.Module):
                 if torch.isnan(depth_loss):
                     pdb.set_trace()
 
-                depth_target = depth_target * invalid
-                depth_target[torch.isnan(depth_target)] = 0
+                # depth_target = depth_target * invalid
+                # depth_target[torch.isnan(depth_target)] = 0
 
                 depths_batch.append(torch.clone(raycast_depth.squeeze(0)))
                 depths_target_output_batch.append(depth_target.squeeze(0))
